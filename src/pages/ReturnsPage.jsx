@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { supabase } from "../lib/supabase.js";
 import { fmt, fmtPct, fmtDate } from "../lib/formatters.js";
+import { nestAccountsByParent, accountHasChildren, deriveSnapshotBalance } from "../lib/accountUtils.js";
 import { C, S } from "../styles/theme.js";
 
 export default function ReturnsPage({ accounts, snapshots, transfers }) {
@@ -11,21 +12,35 @@ export default function ReturnsPage({ accounts, snapshots, transfers }) {
 
   const investAccounts = accounts.filter(a => a.type === "asset_investment");
 
-  const rows = investAccounts.map(acc => {
-    const curr = snapshots.find(s => s.account_id === acc.id && s.snapshot_date === selectedDate);
-    const prevDate = dates[dates.indexOf(selectedDate) + 1];
-    const prev = prevDate ? snapshots.find(s => s.account_id === acc.id && s.snapshot_date === prevDate) : null;
-    if (!curr) return null;
+  const prevDate = dates[dates.indexOf(selectedDate) + 1];
+  const currByAccount = Object.fromEntries(
+    snapshots.filter(s => s.snapshot_date === selectedDate).map(s => [s.account_id, s])
+  );
+  const prevByAccount = prevDate
+    ? Object.fromEntries(snapshots.filter(s => s.snapshot_date === prevDate).map(s => [s.account_id, s]))
+    : {};
 
-    const monthStart = selectedDate.slice(0, 7) + "-01";
-    const netContrib = transfers
-      .filter(t => t.account_id === acc.id && t.date >= monthStart && t.date <= selectedDate)
-      .reduce((s, t) => s + Number(t.net_flow), 0);
+  const monthStart = selectedDate.slice(0, 7) + "-01";
 
-    const gain = curr && prev ? Number(curr.balance) - Number(prev.balance) - netContrib : null;
-    const ret = gain != null && prev?.balance ? (gain / Math.abs(Number(prev.balance))) * 100 : null;
+  const subtreeContrib = (accountId) => {
+    const children = investAccounts.filter(a => a.parent_id === accountId);
+    if (!children.length) {
+      return transfers
+        .filter(t => t.account_id === accountId && t.date >= monthStart && t.date <= selectedDate)
+        .reduce((s, t) => s + Number(t.net_flow), 0);
+    }
+    return children.reduce((sum, c) => sum + subtreeContrib(c.id), 0);
+  };
 
-    return { acc, ending: curr?.balance, beginning: prev?.balance, netContrib, gain, ret };
+  const rows = nestAccountsByParent(investAccounts).map(acc => {
+    const isParent = accountHasChildren(acc.id, investAccounts);
+    const ending   = deriveSnapshotBalance(acc.id, currByAccount, accounts);
+    const beginning = deriveSnapshotBalance(acc.id, prevByAccount, accounts);
+    if (ending == null) return null;
+    const netContrib = subtreeContrib(acc.id);
+    const gain = beginning != null ? ending - beginning - netContrib : null;
+    const ret  = gain != null && beginning ? (gain / Math.abs(beginning)) * 100 : null;
+    return { acc, ending, beginning, netContrib, gain, ret, isParent };
   }).filter(Boolean);
 
   const openTransfer = () => {
@@ -70,14 +85,17 @@ export default function ReturnsPage({ accounts, snapshots, transfers }) {
             </tr>
           </thead>
           <tbody>
-            {rows.map(({ acc, ending, beginning, netContrib, gain, ret }) => (
-              <tr key={acc.id}>
-                <td style={{ ...S.td, fontWeight: 600, color: "#e8e4d9" }}>{acc.name}</td>
+            {rows.map(({ acc, ending, beginning, netContrib, gain, ret, isParent }) => (
+              <tr key={acc.id} style={isParent ? { background: "#181818", borderTop: `1px solid ${C.border}` } : {}}>
+                <td style={{ ...S.td, paddingLeft: 12 + acc.depth * 20, fontWeight: isParent ? 700 : 400, color: isParent ? C.text : C.textMuted }}>
+                  {acc.depth > 0 && <span style={{ color: C.textSubtle, marginRight: 6 }}>↳</span>}
+                  {acc.name}
+                </td>
                 <td style={{ ...S.td, textAlign: "right", color: C.textMuted }}>{beginning != null ? fmt(beginning) : "—"}</td>
                 <td style={{ ...S.td, textAlign: "right", color: netContrib > 0 ? "#60a5fa" : netContrib < 0 ? "#fb923c" : C.textMuted }}>{netContrib ? fmt(netContrib) : "—"}</td>
-                <td style={{ ...S.td, textAlign: "right", color: "#e8e4d9" }}>{fmt(ending)}</td>
+                <td style={{ ...S.td, textAlign: "right", color: C.text }}>{fmt(ending)}</td>
                 <td style={{ ...S.td, textAlign: "right", ...(gain > 0 ? S.positive : gain < 0 ? S.negative : S.neutral) }}>{gain != null ? fmt(gain) : "—"}</td>
-                <td style={{ ...S.td, textAlign: "right", fontWeight: 700, ...(ret > 0 ? S.positive : ret < 0 ? S.negative : S.neutral) }}>{fmtPct(ret)}</td>
+                <td style={{ ...S.td, textAlign: "right", fontWeight: isParent ? 700 : 400, ...(ret > 0 ? S.positive : ret < 0 ? S.negative : S.neutral) }}>{fmtPct(ret)}</td>
               </tr>
             ))}
           </tbody>

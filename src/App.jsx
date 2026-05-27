@@ -8,16 +8,14 @@ import MoMPage from "./pages/MoMPage.jsx";
 import ReturnsPage from "./pages/ReturnsPage.jsx";
 import SnapshotsPage from "./pages/SnapshotsPage.jsx";
 import AccountsPage from "./pages/AccountsPage.jsx";
-import TransactionsPage from "./pages/TransactionsPage.jsx";
 import LoginPage from "./pages/LoginPage.jsx";
 
 const PAGES = [
-  { id: "dashboard",    label: "Dashboard" },
-  { id: "mom",          label: "MoM Change" },
-  { id: "returns",      label: "Returns" },
-  { id: "snapshots",    label: "Snapshots" },
-  { id: "accounts",     label: "Accounts" },
-  { id: "transactions", label: "Transactions" },
+  { id: "dashboard", label: "Dashboard" },
+  { id: "mom",       label: "MoM Change" },
+  { id: "returns",   label: "Returns" },
+  { id: "snapshots", label: "Snapshots" },
+  { id: "accounts",  label: "Accounts" },
 ];
 
 export default function App() {
@@ -27,8 +25,6 @@ export default function App() {
   const [accounts, setAccounts]         = useState([]);
   const [snapshots, setSnapshots]       = useState([]);
   const [transfers, setTransfers]       = useState([]);
-  const [transactions, setTxs]          = useState([]);
-  const [entries, setEntries]           = useState([]);
   const [loading, setLoading]           = useState(false);
   const [toast, setToast]               = useState(null);
   const [error, setError]               = useState(null);
@@ -52,8 +48,6 @@ export default function App() {
     setAccounts([]);
     setSnapshots([]);
     setTransfers([]);
-    setTxs([]);
-    setEntries([]);
     setError(null);
     setPage("dashboard");
   };
@@ -61,12 +55,10 @@ export default function App() {
   const load = useCallback(async () => {
     if (!session) return;
     setLoading(true);
-    const [a, s, tr, tx, en] = await Promise.all([
+    const [a, s, tr] = await Promise.all([
       supabase.from("accounts").select("*").order("name"),
       supabase.from("snapshots").select("*").order("snapshot_date", { ascending: false }),
       supabase.from("transfers").select("*").order("date", { ascending: false }),
-      supabase.from("transactions").select("*").order("date", { ascending: false }),
-      supabase.from("entries").select("*"),
     ]);
     if (a.error) {
       const details = [a.error.message, a.error.details, a.error.hint].filter(Boolean).join(" | ");
@@ -77,8 +69,6 @@ export default function App() {
     setAccounts(a.data ?? []);
     setSnapshots(s.data ?? []);
     setTransfers(tr.data ?? []);
-    setTxs(tx.data ?? []);
-    setEntries(en.data ?? []);
     setLoading(false);
   }, [session]);
 
@@ -157,19 +147,6 @@ export default function App() {
     load();
   };
 
-  const handleSaveTransaction = async (form) => {
-    const { data: txData, error: txErr } = await supabase
-      .from("transactions")
-      .insert([{ date: form.date, description: form.description, memo: form.memo || null }])
-      .select();
-    if (txErr) { notify("Failed: " + txErr.message); return; }
-    const entryRows = form.lines.map(l => ({ transaction_id: txData[0].id, account_id: Number(l.account_id), entry_type: l.type, amount: Number(l.amount) }));
-    const { error: entErr } = await supabase.from("entries").insert(entryRows);
-    if (entErr) { notify("Entries failed: " + entErr.message); return; }
-    notify("Transaction saved");
-    load();
-  };
-
   if (loading) return (
     <div style={{ ...S.app, display: "flex", alignItems: "center", justifyContent: "center", minHeight: "100vh" }}>
       <div style={{ color: C.textMuted, fontSize: 13, letterSpacing: "0.15em", textTransform: "uppercase" }}>Loading…</div>
@@ -209,12 +186,11 @@ export default function App() {
       </nav>
 
       <main style={S.main}>
-        {page === "dashboard"    && <Dashboard       accounts={accounts} snapshots={snapshots} />}
-        {page === "mom"          && <MoMPage          accounts={accounts} snapshots={snapshots} />}
-        {page === "returns"      && <ReturnsPage      accounts={accounts} snapshots={snapshots} transfers={transfers} />}
-        {page === "snapshots"    && <SnapshotsPage    accounts={accounts} snapshots={snapshots} onSave={handleSaveSnapshot} onDelete={handleDelete} />}
-        {page === "accounts"     && <AccountsPage     accounts={accounts} onSave={handleSaveAccount} onDelete={handleDelete} />}
-        {page === "transactions" && <TransactionsPage accounts={accounts} transactions={transactions} entries={entries} onSave={handleSaveTransaction} />}
+        {page === "dashboard" && <Dashboard    accounts={accounts} snapshots={snapshots} />}
+        {page === "mom"       && <MoMPage       accounts={accounts} snapshots={snapshots} />}
+        {page === "returns"   && <ReturnsPage   accounts={accounts} snapshots={snapshots} transfers={transfers} />}
+        {page === "snapshots" && <SnapshotsPage accounts={accounts} snapshots={snapshots} onSave={handleSaveSnapshot} onDelete={handleDelete} />}
+        {page === "accounts"  && <AccountsPage  accounts={accounts} onSave={handleSaveAccount} onDelete={handleDelete} />}
       </main>
 
       {toast && <Toast msg={toast} onDone={() => setToast(null)} />}
