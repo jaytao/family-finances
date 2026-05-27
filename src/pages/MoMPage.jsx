@@ -86,31 +86,29 @@ export default function MoMPage({ accounts, snapshots }) {
             </tr>
           </thead>
           <tbody>
-            {groups.map(({ type, label, rows }) => (
-              <>
-                <tr key={`grp-${type}`}>
-                  <td colSpan={5} style={{ padding: "14px 12px 6px", borderBottom: `1px solid ${C.borderSubtle}` }}>
-                    <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 11, letterSpacing: "0.12em", textTransform: "uppercase", color: TYPE_COLORS[type] ?? C.textMuted, fontWeight: 600 }}>
-                      <span style={{ width: 6, height: 6, borderRadius: "50%", background: TYPE_COLORS[type] ?? C.textMuted, display: "inline-block" }} />
-                      {label}
-                    </span>
-                  </td>
-                </tr>
-                {rows.map(({ acc, curr, prev, change, changePct }) => {
-                  const isParent = accountHasChildren(acc.id, accounts);
-                  const changeStyle = change == null ? S.neutral : change > 0 ? S.positive : change < 0 ? S.negative : S.neutral;
-                  return (
-                    <tr key={acc.id}>
-                      <td style={{ ...S.td, paddingLeft: 12 + acc.depth * 16, fontWeight: isParent ? 600 : 400, color: isParent ? C.text : C.textMuted }}>{acc.name}</td>
-                      <td style={{ ...S.td, textAlign: "right", color: C.textMuted }}>{prev != null ? fmt(prev) : "—"}</td>
-                      <td style={{ ...S.td, textAlign: "right", color: C.text }}>{curr != null ? fmt(curr) : "—"}</td>
-                      <td style={{ ...S.td, textAlign: "right", ...changeStyle }}>{change != null ? fmt(change) : "—"}</td>
-                      <td style={{ ...S.td, textAlign: "right", ...changeStyle }}>{fmtPct(changePct)}</td>
-                    </tr>
-                  );
-                })}
-              </>
-            ))}
+            {groups.flatMap(({ type, label, rows }) => [
+              <tr key={`grp-${type}`}>
+                <td colSpan={5} style={{ padding: "14px 12px 6px", borderBottom: `1px solid ${C.borderSubtle}` }}>
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 11, letterSpacing: "0.12em", textTransform: "uppercase", color: TYPE_COLORS[type] ?? C.textMuted, fontWeight: 600 }}>
+                    <span style={{ width: 6, height: 6, borderRadius: "50%", background: TYPE_COLORS[type] ?? C.textMuted, display: "inline-block" }} />
+                    {label}
+                  </span>
+                </td>
+              </tr>,
+              ...rows.map(({ acc, curr, prev, change, changePct }) => {
+                const isParent = accountHasChildren(acc.id, accounts);
+                const changeStyle = change == null ? S.neutral : change > 0 ? S.positive : change < 0 ? S.negative : S.neutral;
+                return (
+                  <tr key={acc.id}>
+                    <td style={{ ...S.td, paddingLeft: 12 + acc.depth * 16, fontWeight: isParent ? 600 : 400, color: isParent ? C.text : C.textMuted }}>{acc.name}</td>
+                    <td style={{ ...S.td, textAlign: "right", color: C.textMuted }}>{prev != null ? fmt(prev) : "—"}</td>
+                    <td style={{ ...S.td, textAlign: "right", color: C.text }}>{curr != null ? fmt(curr) : "—"}</td>
+                    <td style={{ ...S.td, textAlign: "right", ...changeStyle }}>{change != null ? fmt(change) : "—"}</td>
+                    <td style={{ ...S.td, textAlign: "right", ...changeStyle }}>{fmtPct(changePct)}</td>
+                  </tr>
+                );
+              }),
+            ])}
           </tbody>
         </table>
       </div>
