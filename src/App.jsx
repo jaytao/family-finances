@@ -196,7 +196,7 @@ export default function App() {
       <main style={S.main}>
         {page === "dashboard" && <Dashboard    accounts={accounts} snapshots={snapshots} />}
         {page === "mom"       && <MoMPage       accounts={accounts} snapshots={snapshots} />}
-        {page === "returns"   && <ReturnsPage   accounts={accounts} snapshots={snapshots} transfers={transfers} />}
+        {page === "returns"   && <ReturnsPage   accounts={accounts} snapshots={snapshots} transfers={transfers} onDelete={handleDelete} onRefresh={load} />}
         {page === "snapshots" && <SnapshotsPage accounts={accounts} snapshots={snapshots} onSave={handleSaveSnapshot} onDelete={handleDelete} onDeleteMonth={handleDeleteMonth} />}
         {page === "accounts"  && <AccountsPage  accounts={accounts} onSave={handleSaveAccount} onDelete={handleDelete} />}
       </main>

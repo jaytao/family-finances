@@ -1,13 +1,24 @@
 import { useState } from "react";
 import { supabase } from "../lib/supabase.js";
-import { fmt, fmtPct, fmtDate } from "../lib/formatters.js";
+import { fmt, fmtPct, fmtDate, parseCash } from "../lib/formatters.js";
 import { nestAccountsByParent, accountHasChildren, deriveSnapshotBalance } from "../lib/accountUtils.js";
 import { C, S } from "../styles/theme.js";
+import CashInput from "../components/CashInput.jsx";
 
-export default function ReturnsPage({ accounts, snapshots, transfers }) {
+export default function ReturnsPage({ accounts, snapshots, transfers, onDelete, onRefresh }) {
   const dates = [...new Set(snapshots.map(s => s.snapshot_date))].sort().reverse();
-  const [endDate, setEndDate]     = useState(dates[0] ?? "");
-  const [startDate, setStartDate] = useState(dates[1] ?? "");
+
+  const [endDate, setEndDate] = useState(() => {
+    const stored = localStorage.getItem("returns_endDate");
+    return stored && dates.includes(stored) ? stored : (dates[0] ?? "");
+  });
+  const [startDate, setStartDate] = useState(() => {
+    const stored = localStorage.getItem("returns_startDate");
+    return stored && dates.includes(stored) ? stored : (dates[1] ?? "");
+  });
+
+  const updateEndDate = (d) => { setEndDate(d); localStorage.setItem("returns_endDate", d); };
+  const updateStartDate = (d) => { setStartDate(d); localStorage.setItem("returns_startDate", d); };
   const [modal, setModal] = useState(null);
   const [form, setForm] = useState({});
 
@@ -30,8 +41,9 @@ export default function ReturnsPage({ accounts, snapshots, transfers }) {
     return children.reduce((sum, c) => sum + subtreeContrib(c.id), 0);
   };
 
+  const windowStart = startDate ? startDate.slice(0, 7) + "-01" : null;
   const windowTransfers = transfers.filter(t =>
-    (!startDate || t.date > startDate) && (!endDate || t.date <= endDate)
+    (!windowStart || t.date >= windowStart) && (!endDate || t.date <= endDate)
   );
 
   const rows = nestAccountsByParent(investAccounts).map(acc => {
@@ -54,16 +66,22 @@ export default function ReturnsPage({ accounts, snapshots, transfers }) {
 
   const openTransfer = () => {
     setForm({ account_id: investAccounts[0]?.id ?? "", date: endDate, net_flow: "", description: "" });
-    setModal(true);
+    setModal({ mode: "new" });
+  };
+
+  const openEdit = (t) => {
+    setForm({ id: t.id, account_id: t.account_id, date: t.date, net_flow: String(t.net_flow), description: t.description ?? "" });
+    setModal({ mode: "edit" });
   };
 
   const saveTransfer = async () => {
-    const { error } = await supabase.from("transfers").insert([{
-      ...form,
-      account_id: Number(form.account_id),
-      net_flow: Number(form.net_flow),
-    }]);
-    if (!error) setModal(null);
+    const net_flow = parseCash(form.net_flow);
+    if (net_flow == null) return;
+    const payload = { account_id: Number(form.account_id), date: form.date, net_flow, description: form.description || null };
+    const { error } = modal.mode === "edit"
+      ? await supabase.from("transfers").update(payload).eq("id", form.id)
+      : await supabase.from("transfers").insert([payload]);
+    if (!error) { setModal(null); onRefresh(); }
   };
 
   return (
@@ -75,12 +93,12 @@ export default function ReturnsPage({ accounts, snapshots, transfers }) {
         </div>
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
           <span style={{ fontSize: 12, color: C.textMuted, letterSpacing: "0.06em" }}>FROM</span>
-          <select style={{ ...S.select, width: 150 }} value={startDate} onChange={e => setStartDate(e.target.value)}>
+          <select style={{ ...S.select, width: 150 }} value={startDate} onChange={e => updateStartDate(e.target.value)}>
             <option value="">(none)</option>
             {dates.filter(d => !endDate || d < endDate).map(d => <option key={d} value={d}>{fmtDate(d)}</option>)}
           </select>
           <span style={{ fontSize: 12, color: C.textMuted, letterSpacing: "0.06em" }}>TO</span>
-          <select style={{ ...S.select, width: 150 }} value={endDate} onChange={e => setEndDate(e.target.value)}>
+          <select style={{ ...S.select, width: 150 }} value={endDate} onChange={e => updateEndDate(e.target.value)}>
             {dates.filter(d => !startDate || d > startDate).map(d => <option key={d} value={d}>{fmtDate(d)}</option>)}
           </select>
           <button style={S.btn} onClick={openTransfer}>+ Log transfer</button>
@@ -141,6 +159,7 @@ export default function ReturnsPage({ accounts, snapshots, transfers }) {
                 <th style={S.th}>Account</th>
                 <th style={{ ...S.th, textAlign: "right" }}>Flow</th>
                 <th style={S.th}>Description</th>
+                <th style={S.th}></th>
               </tr>
             </thead>
             <tbody>
@@ -152,6 +171,12 @@ export default function ReturnsPage({ accounts, snapshots, transfers }) {
                     <td style={S.td}>{acc?.name ?? "—"}</td>
                     <td style={{ ...S.td, textAlign: "right", ...(t.net_flow > 0 ? S.positive : S.negative) }}>{fmt(t.net_flow)}</td>
                     <td style={{ ...S.td, color: C.textMuted }}>{t.description || "—"}</td>
+                    <td style={{ ...S.td, textAlign: "right" }}>
+                      <span style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
+                        <button style={S.btnGhost} onClick={() => openEdit(t)}>Edit</button>
+                        <button style={S.btnDanger} onClick={() => onDelete("transfers", t.id)}>Del</button>
+                      </span>
+                    </td>
                   </tr>
                 );
               })}
@@ -163,7 +188,7 @@ export default function ReturnsPage({ accounts, snapshots, transfers }) {
       {modal && (
         <div style={S.modal} onClick={e => e.target === e.currentTarget && setModal(null)}>
           <div style={S.modalBox}>
-            <div style={S.modalTitle}>Log cash transfer</div>
+            <div style={S.modalTitle}>{modal.mode === "edit" ? "Edit transfer" : "Log cash transfer"}</div>
             <div style={S.formGroup}>
               <label style={S.label}>Investment account</label>
               <select style={S.select} value={form.account_id} onChange={e => setForm(f => ({ ...f, account_id: e.target.value }))}>
@@ -176,7 +201,7 @@ export default function ReturnsPage({ accounts, snapshots, transfers }) {
             </div>
             <div style={S.formGroup}>
               <label style={S.label}>Net flow (positive = deposit, negative = withdrawal)</label>
-              <input style={S.input} type="number" step="0.01" placeholder="e.g. 14000 or -5000" value={form.net_flow} onChange={e => setForm(f => ({ ...f, net_flow: e.target.value }))} />
+              <CashInput style={S.input} placeholder="e.g. $14,000 or -$5,000" value={form.net_flow} onChange={v => setForm(f => ({ ...f, net_flow: v }))} />
             </div>
             <div style={S.formGroup}>
               <label style={S.label}>Description</label>
