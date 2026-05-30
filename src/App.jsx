@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "./lib/supabase.js";
-import { parseCash } from "./lib/formatters.js";
+import { parseCash, fmtDate } from "./lib/formatters.js";
 import { C, S } from "./styles/theme.js";
 import Toast from "./components/Toast.jsx";
 import Dashboard from "./pages/Dashboard.jsx";
@@ -87,6 +87,14 @@ export default function App() {
     const { error } = await supabase.from(table).delete().eq("id", id);
     if (error) { notify("Delete failed: " + error.message); return; }
     notify("Deleted");
+    load();
+  };
+
+  const handleDeleteMonth = async (snapshotDate) => {
+    if (!confirm(`Delete all snapshots for ${fmtDate(snapshotDate)}?`)) return;
+    const { error } = await supabase.from("snapshots").delete().eq("snapshot_date", snapshotDate);
+    if (error) { notify("Delete failed: " + error.message); return; }
+    notify("Month deleted");
     load();
   };
 
@@ -189,7 +197,7 @@ export default function App() {
         {page === "dashboard" && <Dashboard    accounts={accounts} snapshots={snapshots} />}
         {page === "mom"       && <MoMPage       accounts={accounts} snapshots={snapshots} />}
         {page === "returns"   && <ReturnsPage   accounts={accounts} snapshots={snapshots} transfers={transfers} />}
-        {page === "snapshots" && <SnapshotsPage accounts={accounts} snapshots={snapshots} onSave={handleSaveSnapshot} onDelete={handleDelete} />}
+        {page === "snapshots" && <SnapshotsPage accounts={accounts} snapshots={snapshots} onSave={handleSaveSnapshot} onDelete={handleDelete} onDeleteMonth={handleDeleteMonth} />}
         {page === "accounts"  && <AccountsPage  accounts={accounts} onSave={handleSaveAccount} onDelete={handleDelete} />}
       </main>
 

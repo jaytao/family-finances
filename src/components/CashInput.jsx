@@ -26,7 +26,8 @@ export default function CashInput({ value, onChange, placeholder, style, disable
       value={focused ? draft : display}
       onFocus={() => {
         setFocused(true);
-        setDraft(parsed != null ? String(parsed) : (value ?? ""));
+        setDraft("");
+        onChange("");
       }}
       onChange={(e) => {
         setDraft(e.target.value);

@@ -47,7 +47,10 @@ export default function Dashboard({ accounts, snapshots }) {
   return (
     <div>
       <div style={S.pageTitle}>Overview</div>
-      <div style={S.pageSub}>{latest ? `As of ${fmtDate(latest)}` : "No snapshots yet"}</div>
+      {latest
+        ? <div style={{ fontSize: 22, fontWeight: 600, color: C.text, marginBottom: 16 }}>{fmtDate(latest)}</div>
+        : <div style={S.pageSub}>No snapshots yet</div>
+      }
 
       <div style={S.grid(4)}>
         {[

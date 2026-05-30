@@ -16,7 +16,7 @@ const typeMeta = Object.fromEntries(ACCOUNT_TYPES.map(t => [t.value, t]));
 const LIQUID_TYPES    = ["asset_cash", "asset_investment"];
 const NONLIQUID_TYPES = ["asset_retirement", "asset_physical", "equity"];
 
-export default function SnapshotsPage({ accounts, snapshots, onSave, onDelete }) {
+export default function SnapshotsPage({ accounts, snapshots, onSave, onDelete, onDeleteMonth }) {
   const [modal, setModal]           = useState(null);
   const [form, setForm]             = useState({});
   const [filterMonth, setFilterMonth] = useState("");
@@ -29,7 +29,8 @@ export default function SnapshotsPage({ accounts, snapshots, onSave, onDelete })
   });
 
   const dates        = [...new Set(snapshots.map(s => s.snapshot_date))].sort().reverse();
-  const displayDates = filterMonth ? [filterMonth] : dates.slice(0, 6);
+  const activeMonth  = filterMonth || dates[0];
+  const displayDates = activeMonth ? [activeMonth] : [];
   const assetAccounts = accounts;
 
   const openNew = () => {
@@ -81,8 +82,7 @@ export default function SnapshotsPage({ accounts, snapshots, onSave, onDelete })
           <div style={S.pageSub}>Monthly balance entries per account</div>
         </div>
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          <select style={{ ...S.select, width: 160 }} value={filterMonth} onChange={e => setFilterMonth(e.target.value)}>
-            <option value="">All months</option>
+          <select style={{ ...S.select, width: 160 }} value={activeMonth || ""} onChange={e => setFilterMonth(e.target.value)}>
             {dates.map(d => <option key={d} value={d}>{fmtDate(d)}</option>)}
           </select>
           <button style={S.btn} onClick={openNew}>+ New snapshot</button>
@@ -90,9 +90,8 @@ export default function SnapshotsPage({ accounts, snapshots, onSave, onDelete })
       </div>
 
       {(() => {
-        const latestDate = dates[0];
-        if (!latestDate) return null;
-        const latestSnaps = snapshots.filter(s => s.snapshot_date === latestDate);
+        if (!activeMonth) return null;
+        const latestSnaps = snapshots.filter(s => s.snapshot_date === activeMonth);
         const latestRows = buildSnapshotDisplayRows(latestSnaps, assetAccounts);
         let liquid = 0, nonLiquid = 0, liabilities = 0;
         latestRows.filter(r => r.depth === 0).forEach(({ account, balance }) => {
@@ -113,7 +112,7 @@ export default function SnapshotsPage({ accounts, snapshots, onSave, onDelete })
               <div key={m.label} style={S.card}>
                 <div style={S.cardLabel}>{m.label}</div>
                 <div style={{ ...S.cardValue, color: m.color || C.text }}>{fmt(m.value)}</div>
-                <div style={S.cardSub}>{fmtDate(latestDate)}</div>
+                <div style={S.cardSub}>{fmtDate(activeMonth)}</div>
               </div>
             ))}
           </div>
@@ -127,7 +126,10 @@ export default function SnapshotsPage({ accounts, snapshots, onSave, onDelete })
           <div key={date} style={{ ...S.card, marginBottom: 12 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
               <div style={{ ...S.sectionTitle, marginBottom: 0 }}>{fmtDate(date)}</div>
-              <button style={S.btnGhost} onClick={() => openEditMonth(date)}>Edit month</button>
+              <span style={{ display: "flex", gap: 8 }}>
+                <button style={S.btnGhost} onClick={() => openEditMonth(date)}>Edit month</button>
+                <button style={S.btnDanger} onClick={() => onDeleteMonth(date)}>Delete month</button>
+              </span>
             </div>
             <table style={S.table}>
               <thead>
@@ -135,7 +137,6 @@ export default function SnapshotsPage({ accounts, snapshots, onSave, onDelete })
                   <th style={S.th}>Account</th>
                   <th style={{ ...S.th, textAlign: "right" }}>Balance</th>
                   <th style={S.th}>Type</th>
-                  <th style={S.th}>Notes</th>
                   <th style={S.th}></th>
                 </tr>
               </thead>
@@ -162,7 +163,6 @@ export default function SnapshotsPage({ accounts, snapshots, onSave, onDelete })
                           {balance != null ? fmtCash(balance) : "—"}
                         </td>
                         <td style={S.td}><span style={S.badge(account?.type)}>{typeMeta[account?.type]?.label ?? account?.type}</span></td>
-                        <td style={{ ...S.td, color: C.textMuted }}>{hasChildren ? "—" : (snap?.notes || "—")}</td>
                         <td style={{ ...S.td, textAlign: "right" }}>
                           {!hasChildren && (
                             <span style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
@@ -199,7 +199,23 @@ export default function SnapshotsPage({ accounts, snapshots, onSave, onDelete })
                 {modal.mode === "editMonth" ? (
                   <div style={{ fontSize: 15, color: C.text, padding: "10px 0" }}>{fmtDate(form.snapshot_date)}</div>
                 ) : (
-                  <input style={S.input} type="date" value={form.snapshot_date} onChange={e => setSnapshotDate(e.target.value)} />
+                  <span style={{ display: "flex", gap: 8 }}>
+                    {(() => {
+                      const cur = form.snapshot_date ? new Date(form.snapshot_date + "T00:00:00") : new Date();
+                      const selYear = cur.getFullYear(), selMonth = cur.getMonth() + 1;
+                      const years = Array.from({ length: 10 }, (_, i) => today.getFullYear() - 7 + i);
+                      const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+                      const update = (y, m) => setSnapshotDate(lastDayOfMonth(y, m));
+                      return (<>
+                        <select style={S.select} value={selMonth} onChange={e => update(selYear, Number(e.target.value))}>
+                          {months.map((name, i) => <option key={i+1} value={i+1}>{name}</option>)}
+                        </select>
+                        <select style={S.select} value={selYear} onChange={e => update(Number(e.target.value), selMonth)}>
+                          {years.map(y => <option key={y} value={y}>{y}</option>)}
+                        </select>
+                      </>);
+                    })()}
+                  </span>
                 )}
               </div>
               <button type="button" style={S.btnGhost} onClick={copyAllPrevious}>Copy all previous</button>
@@ -210,7 +226,6 @@ export default function SnapshotsPage({ accounts, snapshots, onSave, onDelete })
                   <th style={S.th}>Account</th>
                   <th style={{ ...S.th, textAlign: "right" }}>Previous</th>
                   <th style={{ ...S.th, textAlign: "right" }}>New balance</th>
-                  <th style={S.th}>Notes</th>
                 </tr>
               </thead>
               <tbody>
@@ -245,19 +260,6 @@ export default function SnapshotsPage({ accounts, snapshots, onSave, onDelete })
                             placeholder={row.prev_balance != null ? fmtCash(row.prev_balance) : "$0.00"}
                             value={row.balance}
                             onChange={v => setRow(row.account_id, { balance: v })}
-                          />
-                        )}
-                      </td>
-                      <td style={S.td}>
-                        {row.hasChildren ? (
-                          <span style={{ color: C.textSubtle, fontSize: 12 }}>—</span>
-                        ) : (
-                          <input
-                            style={S.input}
-                            type="text"
-                            placeholder="Optional"
-                            value={row.notes ?? ""}
-                            onChange={e => setRow(row.account_id, { notes: e.target.value })}
                           />
                         )}
                       </td>

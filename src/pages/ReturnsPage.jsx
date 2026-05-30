@@ -6,36 +6,34 @@ import { C, S } from "../styles/theme.js";
 
 export default function ReturnsPage({ accounts, snapshots, transfers }) {
   const dates = [...new Set(snapshots.map(s => s.snapshot_date))].sort().reverse();
-  const [selectedDate, setSelectedDate] = useState(dates[0] ?? "");
+  const [endDate, setEndDate]     = useState(dates[0] ?? "");
+  const [startDate, setStartDate] = useState(dates[1] ?? "");
   const [modal, setModal] = useState(null);
   const [form, setForm] = useState({});
 
   const investAccounts = accounts.filter(a => a.type === "asset_investment");
 
-  const prevDate = dates[dates.indexOf(selectedDate) + 1];
-  const currByAccount = Object.fromEntries(
-    snapshots.filter(s => s.snapshot_date === selectedDate).map(s => [s.account_id, s])
+  const endByAccount = Object.fromEntries(
+    snapshots.filter(s => s.snapshot_date === endDate).map(s => [s.account_id, s])
   );
-  const prevByAccount = prevDate
-    ? Object.fromEntries(snapshots.filter(s => s.snapshot_date === prevDate).map(s => [s.account_id, s]))
+  const startByAccount = startDate
+    ? Object.fromEntries(snapshots.filter(s => s.snapshot_date === startDate).map(s => [s.account_id, s]))
     : {};
-
-  const monthStart = selectedDate.slice(0, 7) + "-01";
 
   const subtreeContrib = (accountId) => {
     const children = investAccounts.filter(a => a.parent_id === accountId);
     if (!children.length) {
       return transfers
-        .filter(t => t.account_id === accountId && t.date >= monthStart && t.date <= selectedDate)
+        .filter(t => t.account_id === accountId && t.date > startDate && t.date <= endDate)
         .reduce((s, t) => s + Number(t.net_flow), 0);
     }
     return children.reduce((sum, c) => sum + subtreeContrib(c.id), 0);
   };
 
   const rows = nestAccountsByParent(investAccounts).map(acc => {
-    const isParent = accountHasChildren(acc.id, investAccounts);
-    const ending   = deriveSnapshotBalance(acc.id, currByAccount, accounts);
-    const beginning = deriveSnapshotBalance(acc.id, prevByAccount, accounts);
+    const isParent  = accountHasChildren(acc.id, investAccounts);
+    const ending    = deriveSnapshotBalance(acc.id, endByAccount, accounts);
+    const beginning = deriveSnapshotBalance(acc.id, startByAccount, accounts);
     if (ending == null) return null;
     const netContrib = subtreeContrib(acc.id);
     const gain = beginning != null ? ending - beginning - netContrib : null;
@@ -44,7 +42,7 @@ export default function ReturnsPage({ accounts, snapshots, transfers }) {
   }).filter(Boolean);
 
   const openTransfer = () => {
-    setForm({ account_id: investAccounts[0]?.id ?? "", date: selectedDate, net_flow: "", description: "" });
+    setForm({ account_id: investAccounts[0]?.id ?? "", date: endDate, net_flow: "", description: "" });
     setModal(true);
   };
 
@@ -64,9 +62,15 @@ export default function ReturnsPage({ accounts, snapshots, transfers }) {
           <div style={S.pageTitle}>Investment Returns</div>
           <div style={S.pageSub}>Money-weighted return — contributions excluded</div>
         </div>
-        <div style={{ display: "flex", gap: 8 }}>
-          <select style={{ ...S.select, width: 180 }} value={selectedDate} onChange={e => setSelectedDate(e.target.value)}>
-            {dates.map(d => <option key={d} value={d}>{fmtDate(d)}</option>)}
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <span style={{ fontSize: 12, color: C.textMuted, letterSpacing: "0.06em" }}>FROM</span>
+          <select style={{ ...S.select, width: 150 }} value={startDate} onChange={e => setStartDate(e.target.value)}>
+            <option value="">(none)</option>
+            {dates.filter(d => !endDate || d < endDate).map(d => <option key={d} value={d}>{fmtDate(d)}</option>)}
+          </select>
+          <span style={{ fontSize: 12, color: C.textMuted, letterSpacing: "0.06em" }}>TO</span>
+          <select style={{ ...S.select, width: 150 }} value={endDate} onChange={e => setEndDate(e.target.value)}>
+            {dates.filter(d => !startDate || d > startDate).map(d => <option key={d} value={d}>{fmtDate(d)}</option>)}
           </select>
           <button style={S.btn} onClick={openTransfer}>+ Log transfer</button>
         </div>
