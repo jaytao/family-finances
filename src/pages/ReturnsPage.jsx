@@ -30,6 +30,10 @@ export default function ReturnsPage({ accounts, snapshots, transfers }) {
     return children.reduce((sum, c) => sum + subtreeContrib(c.id), 0);
   };
 
+  const windowTransfers = transfers.filter(t =>
+    (!startDate || t.date > startDate) && (!endDate || t.date <= endDate)
+  );
+
   const rows = nestAccountsByParent(investAccounts).map(acc => {
     const isParent  = accountHasChildren(acc.id, investAccounts);
     const ending    = deriveSnapshotBalance(acc.id, endByAccount, accounts);
@@ -40,6 +44,13 @@ export default function ReturnsPage({ accounts, snapshots, transfers }) {
     const ret  = gain != null && beginning ? (gain / Math.abs(beginning)) * 100 : null;
     return { acc, ending, beginning, netContrib, gain, ret, isParent };
   }).filter(Boolean);
+
+  const topRows = rows.filter(r => r.acc.depth === 0);
+  const totalBeginning = topRows.every(r => r.beginning == null) ? null : topRows.reduce((s, r) => s + (r.beginning ?? 0), 0);
+  const totalEnding    = topRows.reduce((s, r) => s + (r.ending ?? 0), 0);
+  const totalContrib   = topRows.reduce((s, r) => s + r.netContrib, 0);
+  const totalGain      = totalBeginning != null ? totalEnding - totalBeginning - totalContrib : null;
+  const totalRet       = totalGain != null && totalBeginning ? (totalGain / Math.abs(totalBeginning)) * 100 : null;
 
   const openTransfer = () => {
     setForm({ account_id: investAccounts[0]?.id ?? "", date: endDate, net_flow: "", description: "" });
@@ -102,13 +113,27 @@ export default function ReturnsPage({ accounts, snapshots, transfers }) {
                 <td style={{ ...S.td, textAlign: "right", fontWeight: isParent ? 700 : 400, ...(ret > 0 ? S.positive : ret < 0 ? S.negative : S.neutral) }}>{fmtPct(ret)}</td>
               </tr>
             ))}
+            {rows.length > 0 && (() => {
+              const totalGainStyle = totalGain == null ? S.neutral : totalGain > 0 ? S.positive : totalGain < 0 ? S.negative : S.neutral;
+              const totalRetStyle  = totalRet  == null ? S.neutral : totalRet  > 0 ? S.positive : totalRet  < 0 ? S.negative : S.neutral;
+              return (
+                <tr style={{ background: "#1a1a2e", borderTop: `2px solid ${C.border}` }}>
+                  <td style={{ ...S.td, fontWeight: 700, color: C.text, fontSize: 13, letterSpacing: "0.06em", textTransform: "uppercase" }}>Total</td>
+                  <td style={{ ...S.td, textAlign: "right", fontWeight: 700, color: C.textMuted }}>{totalBeginning != null ? fmt(totalBeginning) : "—"}</td>
+                  <td style={{ ...S.td, textAlign: "right", fontWeight: 700, color: totalContrib > 0 ? "#60a5fa" : totalContrib < 0 ? "#fb923c" : C.textMuted }}>{totalContrib ? fmt(totalContrib) : "—"}</td>
+                  <td style={{ ...S.td, textAlign: "right", fontWeight: 700, color: C.text }}>{fmt(totalEnding)}</td>
+                  <td style={{ ...S.td, textAlign: "right", fontWeight: 700, ...totalGainStyle }}>{totalGain != null ? fmt(totalGain) : "—"}</td>
+                  <td style={{ ...S.td, textAlign: "right", fontWeight: 700, ...totalRetStyle }}>{fmtPct(totalRet)}</td>
+                </tr>
+              );
+            })()}
           </tbody>
         </table>
       </div>
 
-      {transfers.length > 0 && (
+      {windowTransfers.length > 0 && (
         <div style={{ ...S.card, marginTop: 12 }}>
-          <div style={S.sectionTitle}>Recent transfers</div>
+          <div style={S.sectionTitle}>Transfers in window</div>
           <table style={S.table}>
             <thead>
               <tr>
@@ -119,7 +144,7 @@ export default function ReturnsPage({ accounts, snapshots, transfers }) {
               </tr>
             </thead>
             <tbody>
-              {transfers.slice(0, 20).map(t => {
+              {windowTransfers.map(t => {
                 const acc = accounts.find(a => a.id === t.account_id);
                 return (
                   <tr key={t.id}>

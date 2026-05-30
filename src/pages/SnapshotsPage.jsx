@@ -53,7 +53,7 @@ export default function SnapshotsPage({ accounts, snapshots, onSave, onDelete, o
       ...f,
       rows: f.rows.map(r => ({
         ...r,
-        balance: r.hasChildren ? "" : (r.prev_balance != null ? String(r.prev_balance) : r.balance),
+        balance: r.hasChildren ? "" : (r.balance !== "" && r.balance != null ? r.balance : (r.prev_balance != null ? String(r.prev_balance) : "")),
       })),
     }));
   };

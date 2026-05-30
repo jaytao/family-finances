@@ -86,29 +86,44 @@ export default function MoMPage({ accounts, snapshots }) {
             </tr>
           </thead>
           <tbody>
-            {groups.flatMap(({ type, label, rows }) => [
-              <tr key={`grp-${type}`}>
-                <td colSpan={5} style={{ padding: "14px 12px 6px", borderBottom: `1px solid ${C.borderSubtle}` }}>
-                  <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 11, letterSpacing: "0.12em", textTransform: "uppercase", color: TYPE_COLORS[type] ?? C.textMuted, fontWeight: 600 }}>
-                    <span style={{ width: 6, height: 6, borderRadius: "50%", background: TYPE_COLORS[type] ?? C.textMuted, display: "inline-block" }} />
-                    {label}
-                  </span>
-                </td>
-              </tr>,
-              ...rows.map(({ acc, curr, prev, change, changePct }) => {
-                const isParent = accountHasChildren(acc.id, accounts);
-                const changeStyle = change == null ? S.neutral : change > 0 ? S.positive : change < 0 ? S.negative : S.neutral;
-                return (
-                  <tr key={acc.id}>
-                    <td style={{ ...S.td, paddingLeft: 12 + acc.depth * 16, fontWeight: isParent ? 600 : 400, color: isParent ? C.text : C.textMuted }}>{acc.name}</td>
-                    <td style={{ ...S.td, textAlign: "right", color: C.textMuted }}>{prev != null ? fmt(prev) : "—"}</td>
-                    <td style={{ ...S.td, textAlign: "right", color: C.text }}>{curr != null ? fmt(curr) : "—"}</td>
-                    <td style={{ ...S.td, textAlign: "right", ...changeStyle }}>{change != null ? fmt(change) : "—"}</td>
-                    <td style={{ ...S.td, textAlign: "right", ...changeStyle }}>{fmtPct(changePct)}</td>
-                  </tr>
-                );
-              }),
-            ])}
+            {groups.flatMap(({ type, label, rows }) => {
+              const topRows = rows.filter(({ acc }) => acc.depth === 0);
+              const sumPrev   = topRows.some(r => r.prev != null) ? topRows.reduce((s, r) => s + (r.prev ?? 0), 0) : null;
+              const sumCurr   = topRows.some(r => r.curr != null) ? topRows.reduce((s, r) => s + (r.curr ?? 0), 0) : null;
+              const sumChange = sumCurr != null && sumPrev != null ? sumCurr - sumPrev : null;
+              const sumChangePct = sumChange != null && sumPrev ? (sumChange / Math.abs(sumPrev)) * 100 : null;
+              const sumChangeStyle = sumChange == null ? S.neutral : sumChange > 0 ? S.positive : sumChange < 0 ? S.negative : S.neutral;
+              return [
+                <tr key={`grp-${type}`} style={{ background: (TYPE_COLORS[type] ?? C.border) + "18", borderTop: `2px solid ${TYPE_COLORS[type] ?? C.border}` }}>
+                  <td style={{ ...S.td, padding: "10px 12px" }}>
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 11, letterSpacing: "0.12em", textTransform: "uppercase", color: TYPE_COLORS[type] ?? C.textMuted, fontWeight: 700 }}>
+                      <span style={{ width: 6, height: 6, borderRadius: "50%", background: TYPE_COLORS[type] ?? C.textMuted, display: "inline-block" }} />
+                      {label}
+                    </span>
+                  </td>
+                  <td style={{ ...S.td, textAlign: "right", fontWeight: 700, color: C.textMuted }}>{sumPrev != null ? fmt(sumPrev) : "—"}</td>
+                  <td style={{ ...S.td, textAlign: "right", fontWeight: 700, color: C.text }}>{sumCurr != null ? fmt(sumCurr) : "—"}</td>
+                  <td style={{ ...S.td, textAlign: "right", fontWeight: 700, ...sumChangeStyle }}>{sumChange != null ? fmt(sumChange) : "—"}</td>
+                  <td style={{ ...S.td, textAlign: "right", fontWeight: 700, ...sumChangeStyle }}>{fmtPct(sumChangePct)}</td>
+                </tr>,
+                ...rows.map(({ acc, curr, prev, change, changePct }) => {
+                  const isParent = accountHasChildren(acc.id, accounts);
+                  const changeStyle = change == null ? S.neutral : change > 0 ? S.positive : change < 0 ? S.negative : S.neutral;
+                  return (
+                    <tr key={acc.id} style={isParent ? { background: "#181818", borderTop: `1px solid ${C.border}` } : {}}>
+                      <td style={{ ...S.td, paddingLeft: 12 + acc.depth * 16, fontWeight: isParent ? 600 : 400, color: isParent ? C.textMuted : C.textMuted }}>
+                        {isParent && <span style={{ color: C.textSubtle, marginRight: 6, fontSize: 11 }}>Σ</span>}
+                        {acc.name}
+                      </td>
+                      <td style={{ ...S.td, textAlign: "right", fontStyle: isParent ? "italic" : "normal", color: C.textSubtle }}>{prev != null ? fmt(prev) : "—"}</td>
+                      <td style={{ ...S.td, textAlign: "right", fontStyle: isParent ? "italic" : "normal", color: isParent ? C.textSubtle : C.text }}>{curr != null ? fmt(curr) : "—"}</td>
+                      <td style={{ ...S.td, textAlign: "right", fontStyle: isParent ? "italic" : "normal", ...(isParent ? S.neutral : changeStyle) }}>{change != null ? fmt(change) : "—"}</td>
+                      <td style={{ ...S.td, textAlign: "right", fontStyle: isParent ? "italic" : "normal", ...(isParent ? S.neutral : changeStyle) }}>{fmtPct(isParent ? null : changePct)}</td>
+                    </tr>
+                  );
+                }),
+              ];
+            })}
           </tbody>
         </table>
       </div>

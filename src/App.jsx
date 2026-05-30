@@ -115,7 +115,7 @@ export default function App() {
     if (mode === "editMonth") {
       const rows = (form.rows ?? [])
         .filter(r => !r.hasChildren)
-        .map(r => ({ ...r, amount: parseCash(r.balance) }))
+        .map(r => ({ ...r, amount: parseCash(r.balance) ?? (r.prev_balance != null ? Number(r.prev_balance) : null) }))
         .filter(r => r.amount != null);
       if (!rows.length) { notify("Enter at least one balance"); return; }
       let saved = 0;
