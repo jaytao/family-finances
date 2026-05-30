@@ -78,7 +78,7 @@ export default function AccountsPage({ accounts, onSave, onDelete }) {
                         }
                         {a.name}
                       </td>
-                      <td style={S.td}><span style={S.badge(a.type)}>{a.type}</span></td>
+                      <td style={S.td}><span style={S.badge(a.type)}>{typeMeta[a.type]?.label ?? a.type}</span></td>
                       <td style={S.td}>{a.currency}</td>
                       <td style={{ ...S.td, color: C.textMuted }}>{a.description || "—"}</td>
                       <td style={{ ...S.td, textAlign: "right" }}>

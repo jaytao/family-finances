@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { ACCOUNT_TYPES } from "../lib/constants.js";
 import { fmt, fmtCash, fmtDate, lastDayOfMonth, today } from "../lib/formatters.js";
 import {
   accountHasChildren,
@@ -10,6 +11,10 @@ import {
 } from "../lib/accountUtils.js";
 import { C, S } from "../styles/theme.js";
 import CashInput from "../components/CashInput.jsx";
+
+const typeMeta = Object.fromEntries(ACCOUNT_TYPES.map(t => [t.value, t]));
+const LIQUID_TYPES    = ["asset_cash", "asset_investment"];
+const NONLIQUID_TYPES = ["asset_retirement", "asset_physical", "equity"];
 
 export default function SnapshotsPage({ accounts, snapshots, onSave, onDelete }) {
   const [modal, setModal]           = useState(null);
@@ -89,18 +94,20 @@ export default function SnapshotsPage({ accounts, snapshots, onSave, onDelete })
         if (!latestDate) return null;
         const latestSnaps = snapshots.filter(s => s.snapshot_date === latestDate);
         const latestRows = buildSnapshotDisplayRows(latestSnaps, assetAccounts);
-        let assets = 0, liabilities = 0;
+        let liquid = 0, nonLiquid = 0, liabilities = 0;
         latestRows.filter(r => r.depth === 0).forEach(({ account, balance }) => {
           if (balance == null) return;
-          if (["asset_cash", "asset_investment", "asset_physical"].includes(account.type)) assets += balance;
+          if (LIQUID_TYPES.includes(account.type)) liquid += balance;
+          if (NONLIQUID_TYPES.includes(account.type)) nonLiquid += balance;
           if (account.type === "liability") liabilities += balance;
         });
-        const netWorth = assets - liabilities;
+        const netWorth = liquid + nonLiquid - liabilities;
         return (
-          <div style={{ ...S.grid(3), marginBottom: 20 }}>
+          <div style={{ ...S.grid(4), marginBottom: 20 }}>
             {[
-              { label: "Net Worth",         value: netWorth,    color: netWorth >= 0 ? "#4ade80" : "#f87171" },
-              { label: "Total Assets",      value: assets },
+              { label: "Net Worth",         value: netWorth,  color: netWorth >= 0 ? "#4ade80" : "#f87171" },
+              { label: "Liquid Assets",     value: liquid },
+              { label: "Non-Liquid Assets", value: nonLiquid },
               { label: "Total Liabilities", value: liabilities },
             ].map(m => (
               <div key={m.label} style={S.card}>
@@ -154,7 +161,7 @@ export default function SnapshotsPage({ accounts, snapshots, onSave, onDelete })
                         <td style={{ ...S.td, textAlign: "right", fontWeight: isTopLevel ? 700 : 500, color: C.text }}>
                           {balance != null ? fmtCash(balance) : "—"}
                         </td>
-                        <td style={S.td}><span style={S.badge(account?.type)}>{account?.type}</span></td>
+                        <td style={S.td}><span style={S.badge(account?.type)}>{typeMeta[account?.type]?.label ?? account?.type}</span></td>
                         <td style={{ ...S.td, color: C.textMuted }}>{hasChildren ? "—" : (snap?.notes || "—")}</td>
                         <td style={{ ...S.td, textAlign: "right" }}>
                           {!hasChildren && (
@@ -219,7 +226,7 @@ export default function SnapshotsPage({ accounts, snapshots, onSave, onDelete })
                           {acc?.name ?? "Unknown"}
                         </div>
                         <div style={{ fontSize: 12, color: C.textMuted, marginTop: 2 }}>
-                          <span style={S.badge(acc?.type)}>{acc?.type}</span>
+                          <span style={S.badge(acc?.type)}>{typeMeta[acc?.type]?.label ?? acc?.type}</span>
                           {row.prev_date && <span style={{ marginLeft: 6 }}>as of {fmtDate(row.prev_date)}</span>}
                           {row.hasChildren && <span style={{ marginLeft: 6 }}>· rollup</span>}
                         </div>

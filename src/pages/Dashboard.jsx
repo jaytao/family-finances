@@ -8,13 +8,16 @@ export default function Dashboard({ accounts, snapshots }) {
   const dates = [...new Set(snapshots.map(s => s.snapshot_date))].sort();
   const latest = dates[dates.length - 1];
 
+  const LIQUID_TYPES    = ["asset_cash", "asset_investment"];
+  const NONLIQUID_TYPES = ["asset_retirement", "asset_physical", "equity"];
+
   const netWorthByMonth = dates.map(d => {
     const snaps = snapshots.filter(s => s.snapshot_date === d);
     let nw = 0;
     snaps.forEach(s => {
       const acc = accounts.find(a => a.id === s.account_id);
       if (!acc) return;
-      if (["asset_cash", "asset_investment", "asset_physical"].includes(acc.type)) nw += Number(s.balance);
+      if ([...LIQUID_TYPES, ...NONLIQUID_TYPES].includes(acc.type)) nw += Number(s.balance);
       if (acc.type === "liability") nw -= Number(s.balance);
     });
     return { date: d, "Net Worth": nw };
@@ -27,16 +30,17 @@ export default function Dashboard({ accounts, snapshots }) {
       return acc && types.includes(acc.type) ? sum + Number(s.balance) : sum;
     }, 0);
 
-  const totalAssets  = calcTotal(latest, ["asset_cash", "asset_investment", "asset_physical"]);
-  const totalLiab    = calcTotal(latest, ["liability"]);
-  const totalInvest  = calcTotal(latest, ["asset_investment"]);
-  const netWorth     = totalAssets - totalLiab;
+  const totalLiquid    = calcTotal(latest, LIQUID_TYPES);
+  const totalNonLiquid = calcTotal(latest, NONLIQUID_TYPES);
+  const totalAssets    = totalLiquid + totalNonLiquid;
+  const totalLiab      = calcTotal(latest, ["liability"]);
+  const netWorth       = totalAssets - totalLiab;
   const prevNetWorth = netWorthByMonth[netWorthByMonth.length - 2]?.["Net Worth"] ?? null;
   const nwChange     = prevNetWorth != null ? netWorth - prevNetWorth : null;
   const nwChangePct  = prevNetWorth ? (nwChange / Math.abs(prevNetWorth)) * 100 : null;
 
   const byType = ACCOUNT_TYPES
-    .filter(t => ["asset_cash", "asset_investment", "asset_physical", "liability"].includes(t.value))
+    .filter(t => [...LIQUID_TYPES, ...NONLIQUID_TYPES, "liability"].includes(t.value))
     .map(t => ({ name: t.label, value: calcTotal(latest, [t.value]), type: t.value }))
     .filter(d => d.value > 0);
 
@@ -47,10 +51,10 @@ export default function Dashboard({ accounts, snapshots }) {
 
       <div style={S.grid(4)}>
         {[
-          { label: "Net Worth",         value: netWorth,    sub: nwChange != null ? `${fmtPct(nwChangePct)} vs last month` : "—", color: nwChange >= 0 ? "#4ade80" : "#f87171" },
-          { label: "Total Assets",      value: totalAssets, sub: fmtDate(latest) },
-          { label: "Total Liabilities", value: totalLiab,   sub: "Outstanding balances" },
-          { label: "Investments",       value: totalInvest, sub: "Brokerage & retirement" },
+          { label: "Net Worth",         value: netWorth,       sub: nwChange != null ? `${fmtPct(nwChangePct)} vs last month` : "—", color: nwChange >= 0 ? "#4ade80" : "#f87171" },
+          { label: "Liquid Assets",     value: totalLiquid,    sub: "Cash & investments" },
+          { label: "Non-Liquid Assets", value: totalNonLiquid, sub: "Retirement, physical & equity" },
+          { label: "Total Liabilities", value: totalLiab,      sub: "Outstanding balances" },
         ].map(m => (
           <div key={m.label} style={S.card}>
             <div style={S.cardLabel}>{m.label}</div>
