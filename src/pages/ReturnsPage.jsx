@@ -3,7 +3,18 @@ import { supabase } from "../lib/supabase.js";
 import { fmt, fmtPct, fmtDate, parseCash } from "../lib/formatters.js";
 import { nestAccountsByParent, accountHasChildren, deriveSnapshotBalance } from "../lib/accountUtils.js";
 import { C, S } from "../styles/theme.js";
+import { ACCOUNT_TYPES, TYPE_COLORS } from "../lib/constants.js";
 import CashInput from "../components/CashInput.jsx";
+
+const RETURNABLE_TYPES = ACCOUNT_TYPES.filter(t => t.group === "Assets");
+
+const loadTypes = () => {
+  try {
+    const stored = JSON.parse(localStorage.getItem("returns_types"));
+    if (Array.isArray(stored) && stored.length) return stored;
+  } catch {}
+  return ["asset_investment"];
+};
 
 export default function ReturnsPage({ accounts, snapshots, transfers, onDelete, onRefresh }) {
   const dates = [...new Set(snapshots.map(s => s.snapshot_date))].sort().reverse();
@@ -16,13 +27,24 @@ export default function ReturnsPage({ accounts, snapshots, transfers, onDelete, 
     const stored = localStorage.getItem("returns_startDate");
     return stored && dates.includes(stored) ? stored : (dates[1] ?? "");
   });
+  const [selectedTypes, setSelectedTypes] = useState(loadTypes);
 
   const updateEndDate = (d) => { setEndDate(d); localStorage.setItem("returns_endDate", d); };
   const updateStartDate = (d) => { setStartDate(d); localStorage.setItem("returns_startDate", d); };
+
+  const toggleType = (type) => {
+    setSelectedTypes(prev => {
+      const next = prev.includes(type) ? prev.filter(t => t !== type) : [...prev, type];
+      const result = next.length ? next : prev;
+      localStorage.setItem("returns_types", JSON.stringify(result));
+      return result;
+    });
+  };
+
   const [modal, setModal] = useState(null);
   const [form, setForm] = useState({});
 
-  const investAccounts = accounts.filter(a => a.type === "asset_investment");
+  const investAccounts = accounts.filter(a => selectedTypes.includes(a.type));
 
   const endByAccount = Object.fromEntries(
     snapshots.filter(s => s.snapshot_date === endDate).map(s => [s.account_id, s])
@@ -50,10 +72,10 @@ export default function ReturnsPage({ accounts, snapshots, transfers, onDelete, 
     const isParent  = accountHasChildren(acc.id, investAccounts);
     const ending    = deriveSnapshotBalance(acc.id, endByAccount, accounts);
     const beginning = deriveSnapshotBalance(acc.id, startByAccount, accounts);
-    if (ending == null) return null;
+    if (ending == null && beginning == null) return null;
     const netContrib = subtreeContrib(acc.id);
-    const gain = beginning != null ? ending - beginning - netContrib : null;
-    const ret  = gain != null && beginning ? (gain / Math.abs(beginning)) * 100 : null;
+    const gain = (ending ?? 0) - (beginning ?? 0) - netContrib;
+    const ret  = (beginning ?? 0) ? (gain / Math.abs(beginning ?? 0)) * 100 : null;
     return { acc, ending, beginning, netContrib, gain, ret, isParent };
   }).filter(Boolean);
 
@@ -62,7 +84,7 @@ export default function ReturnsPage({ accounts, snapshots, transfers, onDelete, 
   const totalEnding    = topRows.reduce((s, r) => s + (r.ending ?? 0), 0);
   const totalContrib   = topRows.reduce((s, r) => s + r.netContrib, 0);
   const totalGain      = totalBeginning != null ? totalEnding - totalBeginning - totalContrib : null;
-  const totalRet       = totalGain != null && totalBeginning ? (totalGain / Math.abs(totalBeginning)) * 100 : null;
+  const totalRet       = totalGain != null && (totalBeginning ?? 0) ? (totalGain / Math.abs(totalBeginning ?? 0)) * 100 : null;
 
   const openTransfer = () => {
     setForm({ account_id: investAccounts[0]?.id ?? "", date: endDate, net_flow: "", description: "" });
@@ -91,7 +113,29 @@ export default function ReturnsPage({ accounts, snapshots, transfers, onDelete, 
           <div style={S.pageTitle}>Investment Returns</div>
           <div style={S.pageSub}>Money-weighted return — contributions excluded</div>
         </div>
-        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 8 }}>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
+            {RETURNABLE_TYPES.map(t => {
+              const active = selectedTypes.includes(t.value);
+              const color = TYPE_COLORS[t.value] ?? C.accent;
+              return (
+                <button
+                  key={t.value}
+                  onClick={() => toggleType(t.value)}
+                  style={{
+                    fontSize: 11, padding: "3px 10px", borderRadius: 12, cursor: "pointer", letterSpacing: "0.04em",
+                    border: `1px solid ${active ? color : C.border}`,
+                    background: active ? color + "22" : "transparent",
+                    color: active ? color : C.textMuted,
+                    transition: "all 0.15s",
+                  }}
+                >
+                  {t.label}
+                </button>
+              );
+            })}
+          </div>
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
           <span style={{ fontSize: 12, color: C.textMuted, letterSpacing: "0.06em" }}>FROM</span>
           <select style={{ ...S.select, width: 150 }} value={startDate} onChange={e => updateStartDate(e.target.value)}>
             <option value="">(none)</option>
@@ -102,6 +146,7 @@ export default function ReturnsPage({ accounts, snapshots, transfers, onDelete, 
             {dates.filter(d => !startDate || d > startDate).map(d => <option key={d} value={d}>{fmtDate(d)}</option>)}
           </select>
           <button style={S.btn} onClick={openTransfer}>+ Log transfer</button>
+          </div>
         </div>
       </div>
 
@@ -126,8 +171,8 @@ export default function ReturnsPage({ accounts, snapshots, transfers, onDelete, 
                 </td>
                 <td style={{ ...S.td, textAlign: "right", color: C.textMuted }}>{beginning != null ? fmt(beginning) : "—"}</td>
                 <td style={{ ...S.td, textAlign: "right", color: netContrib > 0 ? "#60a5fa" : netContrib < 0 ? "#fb923c" : C.textMuted }}>{netContrib ? fmt(netContrib) : "—"}</td>
-                <td style={{ ...S.td, textAlign: "right", color: C.text }}>{fmt(ending)}</td>
-                <td style={{ ...S.td, textAlign: "right", ...(gain > 0 ? S.positive : gain < 0 ? S.negative : S.neutral) }}>{gain != null ? fmt(gain) : "—"}</td>
+                <td style={{ ...S.td, textAlign: "right", color: C.text }}>{ending != null ? fmt(ending) : "—"}</td>
+                <td style={{ ...S.td, textAlign: "right", ...(gain > 0 ? S.positive : gain < 0 ? S.negative : S.neutral) }}>{fmt(gain)}</td>
                 <td style={{ ...S.td, textAlign: "right", fontWeight: isParent ? 700 : 400, ...(ret > 0 ? S.positive : ret < 0 ? S.negative : S.neutral) }}>{fmtPct(ret)}</td>
               </tr>
             ))}

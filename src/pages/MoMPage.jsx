@@ -26,8 +26,8 @@ export default function MoMPage({ accounts, snapshots }) {
       const curr = deriveSnapshotBalance(acc.id, currByAccount, accounts);
       const prev = deriveSnapshotBalance(acc.id, prevByAccount, accounts);
       if (curr == null && prev == null) return null;
-      const change = curr != null && prev != null ? curr - prev : null;
-      const changePct = change != null && prev ? (change / Math.abs(prev)) * 100 : null;
+      const change = (curr ?? 0) - (prev ?? 0);
+      const changePct = (prev ?? 0) ? (change / Math.abs(prev ?? 0)) * 100 : null;
       return { acc, curr, prev, change, changePct };
     }).filter(Boolean);
     if (!rows.length) return null;
@@ -90,8 +90,8 @@ export default function MoMPage({ accounts, snapshots }) {
               const topRows = rows.filter(({ acc }) => acc.depth === 0);
               const sumPrev   = topRows.some(r => r.prev != null) ? topRows.reduce((s, r) => s + (r.prev ?? 0), 0) : null;
               const sumCurr   = topRows.some(r => r.curr != null) ? topRows.reduce((s, r) => s + (r.curr ?? 0), 0) : null;
-              const sumChange = sumCurr != null && sumPrev != null ? sumCurr - sumPrev : null;
-              const sumChangePct = sumChange != null && sumPrev ? (sumChange / Math.abs(sumPrev)) * 100 : null;
+              const sumChange = sumCurr != null || sumPrev != null ? (sumCurr ?? 0) - (sumPrev ?? 0) : null;
+              const sumChangePct = sumChange != null && (sumPrev ?? 0) ? (sumChange / Math.abs(sumPrev ?? 0)) * 100 : null;
               const sumChangeStyle = sumChange == null ? S.neutral : sumChange > 0 ? S.positive : sumChange < 0 ? S.negative : S.neutral;
               return [
                 <tr key={`grp-${type}`} style={{ background: (TYPE_COLORS[type] ?? C.border) + "18", borderTop: `2px solid ${TYPE_COLORS[type] ?? C.border}` }}>
