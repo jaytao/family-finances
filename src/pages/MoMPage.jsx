@@ -1,14 +1,48 @@
-import { useState } from "react";
-import { BarChart, Bar, XAxis, YAxis, Tooltip, Legend, LabelList, ResponsiveContainer } from "recharts";
+import { useRef, useState } from "react";
+import { BarChart, Bar, XAxis, YAxis, Legend, LabelList, ResponsiveContainer } from "recharts";
 import { ACCOUNT_TYPES, TYPE_COLORS } from "../lib/constants.js";
 import { fmt, fmtPct, fmtDate } from "../lib/formatters.js";
 import { nestAccountsByParent, accountHasChildren, deriveSnapshotBalance } from "../lib/accountUtils.js";
 import { C, S } from "../styles/theme.js";
-import ChartTooltip from "../components/ChartTooltip.jsx";
+
+function totalLabel({ x, y, width, value }) {
+  return (
+    <text x={x + width / 2} y={y} dy={-6} textAnchor="middle" fontSize={12} fill={C.textMuted} style={{ pointerEvents: "none" }}>
+      {fmt(value)}
+    </text>
+  );
+}
+
+function valueLabel({ x, y, width, height, value }) {
+  return (
+    <text x={x + width / 2} y={y + height / 2} dy={4} textAnchor="middle" fontSize={11} fontWeight={700} fill="#0a0a0a" style={{ pointerEvents: "none" }}>
+      {fmt(value)}
+    </text>
+  );
+}
+
+const noLabel = () => null;
 
 export default function MoMPage({ accounts, snapshots }) {
   const dates = [...new Set(snapshots.map(s => s.snapshot_date))].sort().reverse();
   const [selectedDate, setSelectedDate] = useState(dates[0] ?? "");
+  const [hoveredType, setHoveredType] = useState(null);
+  const hoverTimeout = useRef(null);
+
+  const clearHoverTimeout = () => {
+    if (hoverTimeout.current) {
+      clearTimeout(hoverTimeout.current);
+      hoverTimeout.current = null;
+    }
+  };
+  const hoverType = (label) => {
+    clearHoverTimeout();
+    setHoveredType(label);
+  };
+  const unhoverType = () => {
+    clearHoverTimeout();
+    hoverTimeout.current = setTimeout(() => setHoveredType(null), 60);
+  };
 
   const prevDate = dates[dates.indexOf(selectedDate) + 1];
   const currByAccount = Object.fromEntries(
@@ -69,15 +103,32 @@ export default function MoMPage({ accounts, snapshots }) {
             <BarChart data={chartData}>
               <XAxis dataKey="date" tickFormatter={fmtDate} tick={{ fill: C.textMuted, fontSize: 12 }} axisLine={false} tickLine={false} />
               <YAxis tickFormatter={v => "$" + Math.round(v / 1000) + "k"} tick={{ fill: C.textMuted, fontSize: 12 }} axisLine={false} tickLine={false} width={60} />
-              <Tooltip content={<ChartTooltip />} cursor={{ fill: "#ffffff", opacity: 0.06 }} />
-              <Legend wrapperStyle={{ fontSize: 12, color: C.textMuted }} />
-              {presentTypes.map(({ value: type, label }, i) => (
-                <Bar key={type} dataKey={label} stackId="a" fill={TYPE_COLORS[type]}>
-                  {i === presentTypes.length - 1 && (
-                    <LabelList dataKey="total" position="top" formatter={fmt} fill={C.textMuted} fontSize={12} />
-                  )}
-                </Bar>
-              ))}
+              <Legend
+                wrapperStyle={{ fontSize: 12, color: C.textMuted }}
+                onMouseEnter={o => hoverType(o.dataKey)}
+                onMouseLeave={unhoverType}
+              />
+              {presentTypes.map(({ value: type, label }, i) => {
+                const isHovered = hoveredType === label;
+                const dimmed = hoveredType && !isHovered;
+                return (
+                  <Bar
+                    key={type}
+                    dataKey={label}
+                    stackId="a"
+                    fill={TYPE_COLORS[type]}
+                    fillOpacity={dimmed ? 0.15 : 1}
+                    isAnimationActive={false}
+                    onMouseEnter={() => hoverType(label)}
+                    onMouseLeave={unhoverType}
+                  >
+                    {i === presentTypes.length - 1 && (
+                      <LabelList dataKey="total" content={totalLabel} />
+                    )}
+                    <LabelList dataKey={label} content={isHovered ? valueLabel : noLabel} />
+                  </Bar>
+                );
+              })}
             </BarChart>
           </ResponsiveContainer>
         </div>
