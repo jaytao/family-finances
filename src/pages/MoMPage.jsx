@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
+import { BarChart, Bar, XAxis, YAxis, Tooltip, Legend, LabelList, ResponsiveContainer } from "recharts";
 import { ACCOUNT_TYPES, TYPE_COLORS } from "../lib/constants.js";
 import { fmt, fmtPct, fmtDate } from "../lib/formatters.js";
 import { nestAccountsByParent, accountHasChildren, deriveSnapshotBalance } from "../lib/accountUtils.js";
@@ -34,17 +34,21 @@ export default function MoMPage({ accounts, snapshots }) {
     return { type, label, rows };
   }).filter(Boolean);
 
+  const presentTypes = ACCOUNT_TYPES.filter(({ value }) => accounts.some(a => a.type === value));
+
   const chartData = dates.slice().reverse().map(d => {
     const obj = { date: d };
-    accounts.filter(a => ["asset_investment", "asset_cash"].includes(a.type)).forEach(a => {
-      const s = snapshots.find(x => x.account_id === a.id && x.snapshot_date === d);
-      if (s) obj[a.name] = Number(s.balance);
+    presentTypes.forEach(({ value: type, label }) => {
+      obj[label] = snapshots
+        .filter(s => s.snapshot_date === d)
+        .reduce((sum, s) => {
+          const acc = accounts.find(a => a.id === s.account_id);
+          return acc && acc.type === type ? sum + Number(s.balance) : sum;
+        }, 0);
     });
+    obj.total = presentTypes.reduce((sum, { label }) => sum + obj[label], 0);
     return obj;
   });
-
-  const investAccounts = accounts.filter(a => a.type === "asset_investment");
-  const lineColors = ["#60a5fa", "#4ade80", "#a78bfa", "#fbbf24", "#f87171", "#34d399"];
 
   return (
     <div>
@@ -58,18 +62,23 @@ export default function MoMPage({ accounts, snapshots }) {
         </select>
       </div>
 
-      {chartData.length > 1 && investAccounts.length > 0 && (
+      {chartData.length > 0 && presentTypes.length > 0 && (
         <div style={{ ...S.card, marginBottom: 16 }}>
-          <div style={S.sectionTitle}>Investment accounts over time</div>
-          <ResponsiveContainer width="100%" height={200}>
-            <LineChart data={chartData}>
+          <div style={S.sectionTitle}>Balances by month</div>
+          <ResponsiveContainer width="100%" height={280}>
+            <BarChart data={chartData}>
               <XAxis dataKey="date" tickFormatter={fmtDate} tick={{ fill: C.textMuted, fontSize: 12 }} axisLine={false} tickLine={false} />
               <YAxis tickFormatter={v => "$" + Math.round(v / 1000) + "k"} tick={{ fill: C.textMuted, fontSize: 12 }} axisLine={false} tickLine={false} width={60} />
-              <Tooltip content={<ChartTooltip />} />
-              {investAccounts.map((a, i) => (
-                <Line key={a.id} type="monotone" dataKey={a.name} stroke={lineColors[i % lineColors.length]} strokeWidth={1.5} dot={{ r: 2 }} />
+              <Tooltip content={<ChartTooltip />} cursor={{ fill: "#ffffff", opacity: 0.06 }} />
+              <Legend wrapperStyle={{ fontSize: 12, color: C.textMuted }} />
+              {presentTypes.map(({ value: type, label }, i) => (
+                <Bar key={type} dataKey={label} stackId="a" fill={TYPE_COLORS[type]}>
+                  {i === presentTypes.length - 1 && (
+                    <LabelList dataKey="total" position="top" formatter={fmt} fill={C.textMuted} fontSize={12} />
+                  )}
+                </Bar>
               ))}
-            </LineChart>
+            </BarChart>
           </ResponsiveContainer>
         </div>
       )}
