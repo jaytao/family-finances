@@ -1,48 +1,42 @@
-import { LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
+import { LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip, ReferenceLine, ResponsiveContainer, Cell } from "recharts";
 import { ACCOUNT_TYPES, TYPE_COLORS } from "../lib/constants.js";
 import { fmt, fmtPct, fmtDate } from "../lib/formatters.js";
+import { leafTypeTotals } from "../lib/accountUtils.js";
 import { C, S } from "../styles/theme.js";
 import ChartTooltip from "../components/ChartTooltip.jsx";
+
+const LIQUID_TYPES    = ["asset_cash", "asset_investment"];
+const NONLIQUID_TYPES = ["asset_retirement", "asset_physical", "equity"];
+const LIAB_TYPES      = ACCOUNT_TYPES.filter(t => t.group === "Liabilities").map(t => t.value);
 
 export default function Dashboard({ accounts, snapshots }) {
   const dates = [...new Set(snapshots.map(s => s.snapshot_date))].sort();
   const latest = dates[dates.length - 1];
 
-  const LIQUID_TYPES    = ["asset_cash", "asset_investment"];
-  const NONLIQUID_TYPES = ["asset_retirement", "asset_physical", "equity"];
+  const sumTypes = (totals, types) => types.reduce((s, t) => s + (totals[t] ?? 0), 0);
 
   const netWorthByMonth = dates.map(d => {
-    const snaps = snapshots.filter(s => s.snapshot_date === d);
-    let nw = 0;
-    snaps.forEach(s => {
-      const acc = accounts.find(a => a.id === s.account_id);
-      if (!acc) return;
-      if ([...LIQUID_TYPES, ...NONLIQUID_TYPES].includes(acc.type)) nw += Number(s.balance);
-      if (acc.type === "liability") nw -= Number(s.balance);
-    });
-    return { date: d, "Net Worth": nw };
+    const totals = leafTypeTotals(snapshots, accounts, d);
+    return { date: d, "Net Worth": sumTypes(totals, [...LIQUID_TYPES, ...NONLIQUID_TYPES]) - sumTypes(totals, LIAB_TYPES) };
   });
 
-  const calcTotal = (date, types) => snapshots
-    .filter(s => s.snapshot_date === date)
-    .reduce((sum, s) => {
-      const acc = accounts.find(a => a.id === s.account_id);
-      return acc && types.includes(acc.type) ? sum + Number(s.balance) : sum;
-    }, 0);
-
-  const totalLiquid    = calcTotal(latest, LIQUID_TYPES);
-  const totalNonLiquid = calcTotal(latest, NONLIQUID_TYPES);
+  const latestTotals   = latest ? leafTypeTotals(snapshots, accounts, latest) : {};
+  const totalLiquid    = sumTypes(latestTotals, LIQUID_TYPES);
+  const totalNonLiquid = sumTypes(latestTotals, NONLIQUID_TYPES);
   const totalAssets    = totalLiquid + totalNonLiquid;
-  const totalLiab      = calcTotal(latest, ["liability"]);
+  const totalLiab      = sumTypes(latestTotals, LIAB_TYPES);
   const netWorth       = totalAssets - totalLiab;
   const prevNetWorth = netWorthByMonth[netWorthByMonth.length - 2]?.["Net Worth"] ?? null;
   const nwChange     = prevNetWorth != null ? netWorth - prevNetWorth : null;
   const nwChangePct  = prevNetWorth ? (nwChange / Math.abs(prevNetWorth)) * 100 : null;
 
   const byType = ACCOUNT_TYPES
-    .filter(t => [...LIQUID_TYPES, ...NONLIQUID_TYPES, "liability"].includes(t.value))
-    .map(t => ({ name: t.label, value: calcTotal(latest, [t.value]), type: t.value }))
-    .filter(d => d.value > 0);
+    .filter(t => [...LIQUID_TYPES, ...NONLIQUID_TYPES, ...LIAB_TYPES].includes(t.value))
+    .map(t => {
+      const v = latestTotals[t.value] ?? 0;
+      return { name: t.label, value: t.group === "Liabilities" ? -v : v, type: t.value };
+    })
+    .filter(d => d.value !== 0);
 
   return (
     <div>
@@ -86,12 +80,13 @@ export default function Dashboard({ accounts, snapshots }) {
           <div style={S.sectionTitle}>Balance by account type</div>
           <ResponsiveContainer width="100%" height={160}>
             <BarChart data={byType} layout="vertical">
-              <XAxis type="number" tickFormatter={v => "$" + Math.round(v / 1000) + "k"} tick={{ fill: C.textMuted, fontSize: 12 }} axisLine={false} tickLine={false} />
+              <XAxis type="number" tickFormatter={v => (v < 0 ? "-$" : "$") + Math.round(Math.abs(v) / 1000) + "k"} tick={{ fill: C.textMuted, fontSize: 12 }} axisLine={false} tickLine={false} />
               <YAxis type="category" dataKey="name" tick={{ fill: C.textMuted, fontSize: 12 }} axisLine={false} tickLine={false} width={90} />
-              <Tooltip content={<ChartTooltip />} />
-              <Bar dataKey="value" radius={[0, 2, 2, 0]}>
+              <Tooltip content={<ChartTooltip />} cursor={{ fill: "#ffffff", opacity: 0.06 }} />
+              <Bar dataKey="value" radius={2}>
                 {byType.map((d) => <Cell key={d.type} fill={TYPE_COLORS[d.type]} />)}
               </Bar>
+              <ReferenceLine x={0} stroke={C.text} strokeWidth={1.5} />
             </BarChart>
           </ResponsiveContainer>
         </div>

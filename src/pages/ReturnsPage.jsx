@@ -1,10 +1,9 @@
 import { useState } from "react";
-import { supabase } from "../lib/supabase.js";
-import { fmt, fmtPct, fmtDate, parseCash } from "../lib/formatters.js";
+import { fmt, fmtPct, fmtDate } from "../lib/formatters.js";
 import { nestAccountsByParent, accountHasChildren, deriveSnapshotBalance } from "../lib/accountUtils.js";
 import { C, S } from "../styles/theme.js";
 import { ACCOUNT_TYPES, TYPE_COLORS } from "../lib/constants.js";
-import CashInput from "../components/CashInput.jsx";
+import TransfersPanel from "../components/TransfersPanel.jsx";
 
 const RETURNABLE_TYPES = ACCOUNT_TYPES.filter(t => t.group === "Assets");
 
@@ -41,9 +40,6 @@ export default function ReturnsPage({ accounts, snapshots, transfers, onDelete, 
     });
   };
 
-  const [modal, setModal] = useState(null);
-  const [form, setForm] = useState({});
-
   const investAccounts = accounts.filter(a => selectedTypes.includes(a.type));
 
   const endByAccount = Object.fromEntries(
@@ -63,11 +59,6 @@ export default function ReturnsPage({ accounts, snapshots, transfers, onDelete, 
     return children.reduce((sum, c) => sum + subtreeContrib(c.id), 0);
   };
 
-  const windowStart = startDate ? startDate.slice(0, 7) + "-01" : null;
-  const windowTransfers = transfers.filter(t =>
-    (!windowStart || t.date >= windowStart) && (!endDate || t.date <= endDate)
-  );
-
   const rows = nestAccountsByParent(investAccounts).map(acc => {
     const isParent  = accountHasChildren(acc.id, investAccounts);
     const ending    = deriveSnapshotBalance(acc.id, endByAccount, accounts);
@@ -86,28 +77,13 @@ export default function ReturnsPage({ accounts, snapshots, transfers, onDelete, 
   const totalGain      = totalBeginning != null ? totalEnding - totalBeginning - totalContrib : null;
   const totalRet       = totalGain != null && (totalBeginning ?? 0) ? (totalGain / Math.abs(totalBeginning ?? 0)) * 100 : null;
 
-  const openTransfer = () => {
-    setForm({ account_id: investAccounts[0]?.id ?? "", date: endDate, net_flow: "", description: "" });
-    setModal({ mode: "new" });
-  };
-
-  const openEdit = (t) => {
-    setForm({ id: t.id, account_id: t.account_id, date: t.date, net_flow: String(t.net_flow), description: t.description ?? "" });
-    setModal({ mode: "edit" });
-  };
-
-  const saveTransfer = async () => {
-    const net_flow = parseCash(form.net_flow);
-    if (net_flow == null) return;
-    const payload = { account_id: Number(form.account_id), date: form.date, net_flow, description: form.description || null };
-    const { error } = modal.mode === "edit"
-      ? await supabase.from("transfers").update(payload).eq("id", form.id)
-      : await supabase.from("transfers").insert([payload]);
-    if (!error) { setModal(null); onRefresh(); }
-  };
-
   return (
     <div>
+      <div style={{ background: "#f8717118", border: "1px solid #f8717140", borderRadius: 4, padding: "10px 14px", marginBottom: 16, fontSize: 13, color: C.textMuted }}>
+        <strong style={{ color: "#f87171", letterSpacing: "0.06em" }}>DEPRECATED</strong>
+        {" — this page has been superseded by "}<strong style={{ color: C.text }}>MoM Change</strong>
+        {", which now shows the same contribution-adjusted returns and transfer log over a selectable range."}
+      </div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 }}>
         <div>
           <div style={S.pageTitle}>Investment Returns</div>
@@ -145,7 +121,6 @@ export default function ReturnsPage({ accounts, snapshots, transfers, onDelete, 
           <select style={{ ...S.select, width: 150 }} value={endDate} onChange={e => updateEndDate(e.target.value)}>
             {dates.filter(d => !startDate || d > startDate).map(d => <option key={d} value={d}>{fmtDate(d)}</option>)}
           </select>
-          <button style={S.btn} onClick={openTransfer}>+ Log transfer</button>
           </div>
         </div>
       </div>
@@ -194,71 +169,15 @@ export default function ReturnsPage({ accounts, snapshots, transfers, onDelete, 
         </table>
       </div>
 
-      {windowTransfers.length > 0 && (
-        <div style={{ ...S.card, marginTop: 12 }}>
-          <div style={S.sectionTitle}>Transfers in window</div>
-          <table style={S.table}>
-            <thead>
-              <tr>
-                <th style={S.th}>Date</th>
-                <th style={S.th}>Account</th>
-                <th style={{ ...S.th, textAlign: "right" }}>Flow</th>
-                <th style={S.th}>Description</th>
-                <th style={S.th}></th>
-              </tr>
-            </thead>
-            <tbody>
-              {windowTransfers.map(t => {
-                const acc = accounts.find(a => a.id === t.account_id);
-                return (
-                  <tr key={t.id}>
-                    <td style={{ ...S.td, color: C.textMuted }}>{fmtDate(t.date)}</td>
-                    <td style={S.td}>{acc?.name ?? "—"}</td>
-                    <td style={{ ...S.td, textAlign: "right", ...(t.net_flow > 0 ? S.positive : S.negative) }}>{fmt(t.net_flow)}</td>
-                    <td style={{ ...S.td, color: C.textMuted }}>{t.description || "—"}</td>
-                    <td style={{ ...S.td, textAlign: "right" }}>
-                      <span style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
-                        <button style={S.btnGhost} onClick={() => openEdit(t)}>Edit</button>
-                        <button style={S.btnDanger} onClick={() => onDelete("transfers", t.id)}>Del</button>
-                      </span>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {modal && (
-        <div style={S.modal} onClick={e => e.target === e.currentTarget && setModal(null)}>
-          <div style={S.modalBox}>
-            <div style={S.modalTitle}>{modal.mode === "edit" ? "Edit transfer" : "Log cash transfer"}</div>
-            <div style={S.formGroup}>
-              <label style={S.label}>Investment account</label>
-              <select style={S.select} value={form.account_id} onChange={e => setForm(f => ({ ...f, account_id: e.target.value }))}>
-                {investAccounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-              </select>
-            </div>
-            <div style={S.formGroup}>
-              <label style={S.label}>Date</label>
-              <input style={S.input} type="date" value={form.date} onChange={e => setForm(f => ({ ...f, date: e.target.value }))} />
-            </div>
-            <div style={S.formGroup}>
-              <label style={S.label}>Net flow (positive = deposit, negative = withdrawal)</label>
-              <CashInput style={S.input} placeholder="e.g. $14,000 or -$5,000" value={form.net_flow} onChange={v => setForm(f => ({ ...f, net_flow: v }))} />
-            </div>
-            <div style={S.formGroup}>
-              <label style={S.label}>Description</label>
-              <input style={S.input} type="text" placeholder="e.g. Monthly contribution" value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} />
-            </div>
-            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 24 }}>
-              <button style={S.btnGhost} onClick={() => setModal(null)}>Cancel</button>
-              <button style={S.btn} onClick={saveTransfer}>Save</button>
-            </div>
-          </div>
-        </div>
-      )}
+      <TransfersPanel
+        accounts={accounts}
+        transferAccounts={investAccounts}
+        transfers={transfers}
+        startDate={startDate}
+        endDate={endDate}
+        onDelete={onDelete}
+        onRefresh={onRefresh}
+      />
     </div>
   );
 }

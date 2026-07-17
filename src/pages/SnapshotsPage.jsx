@@ -8,6 +8,7 @@ import {
   buildSnapshotDisplayRows,
   buildEditMonthRows,
   buildBulkSnapshotRows,
+  leafTypeTotals,
 } from "../lib/accountUtils.js";
 import { C, S } from "../styles/theme.js";
 import CashInput from "../components/CashInput.jsx";
@@ -15,6 +16,7 @@ import CashInput from "../components/CashInput.jsx";
 const typeMeta = Object.fromEntries(ACCOUNT_TYPES.map(t => [t.value, t]));
 const LIQUID_TYPES    = ["asset_cash", "asset_investment"];
 const NONLIQUID_TYPES = ["asset_retirement", "asset_physical", "equity"];
+const LIAB_TYPES      = ACCOUNT_TYPES.filter(t => t.group === "Liabilities").map(t => t.value);
 
 export default function SnapshotsPage({ accounts, snapshots, onSave, onDelete, onDeleteMonth }) {
   const [modal, setModal]           = useState(null);
@@ -91,16 +93,12 @@ export default function SnapshotsPage({ accounts, snapshots, onSave, onDelete, o
 
       {(() => {
         if (!activeMonth) return null;
-        const latestSnaps = snapshots.filter(s => s.snapshot_date === activeMonth);
-        const latestRows = buildSnapshotDisplayRows(latestSnaps, assetAccounts);
-        let liquid = 0, nonLiquid = 0, liabilities = 0;
-        latestRows.filter(r => r.depth === 0).forEach(({ account, balance }) => {
-          if (balance == null) return;
-          if (LIQUID_TYPES.includes(account.type)) liquid += balance;
-          if (NONLIQUID_TYPES.includes(account.type)) nonLiquid += balance;
-          if (account.type === "liability") liabilities += balance;
-        });
-        const netWorth = liquid + nonLiquid - liabilities;
+        const totals = leafTypeTotals(snapshots, assetAccounts, activeMonth);
+        const sumTypes = (types) => types.reduce((s, t) => s + (totals[t] ?? 0), 0);
+        const liquid      = sumTypes(LIQUID_TYPES);
+        const nonLiquid   = sumTypes(NONLIQUID_TYPES);
+        const liabilities = sumTypes(LIAB_TYPES);
+        const netWorth    = liquid + nonLiquid - liabilities;
         return (
           <div style={{ ...S.grid(4), marginBottom: 20 }}>
             {[

@@ -13,7 +13,7 @@ import LoginPage from "./pages/LoginPage.jsx";
 const PAGES = [
   { id: "dashboard", label: "Dashboard" },
   { id: "mom",       label: "MoM Change" },
-  { id: "returns",   label: "Returns" },
+  { id: "returns",   label: "Returns", deprecated: true },
   { id: "snapshots", label: "Snapshots" },
   { id: "accounts",  label: "Accounts" },
 ];
@@ -30,6 +30,9 @@ export default function App() {
   const [error, setError]               = useState(null);
 
   const notify = (msg) => setToast(msg);
+  // Postgres check_violation (23514) messages from our triggers are user-facing —
+  // show them verbatim; otherwise fall back to a generic prefix.
+  const notifyError = (error) => notify(error.code === "23514" ? error.message : "Save failed: " + error.message);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session: s } }) => {
@@ -98,23 +101,25 @@ export default function App() {
     load();
   };
 
+  const isParentAccount = (id) => accounts.some(a => a.parent_id === Number(id));
+
   const handleSaveSnapshot = async (form, mode) => {
     if (mode === "bulk") {
       const rows = (form.rows ?? [])
-        .filter(r => !r.hasChildren)
+        .filter(r => !r.hasChildren && !isParentAccount(r.account_id))
         .map(r => ({ ...r, amount: parseCash(r.balance) }))
         .filter(r => r.amount != null)
         .map(r => ({ account_id: Number(r.account_id), snapshot_date: form.snapshot_date, balance: r.amount, notes: r.notes || null }));
       if (!rows.length) { notify("Enter at least one balance"); return; }
       const { error } = await supabase.from("snapshots").insert(rows);
-      if (error) { notify("Save failed: " + error.message); return; }
+      if (error) { notifyError(error); return; }
       notify(`Saved ${rows.length} snapshot${rows.length === 1 ? "" : "s"}`);
       load();
       return;
     }
     if (mode === "editMonth") {
       const rows = (form.rows ?? [])
-        .filter(r => !r.hasChildren)
+        .filter(r => !r.hasChildren && !isParentAccount(r.account_id))
         .map(r => ({ ...r, amount: parseCash(r.balance) ?? (r.prev_balance != null ? Number(r.prev_balance) : null) }))
         .filter(r => r.amount != null);
       if (!rows.length) { notify("Enter at least one balance"); return; }
@@ -124,11 +129,15 @@ export default function App() {
         const { error } = row.snapshot_id
           ? await supabase.from("snapshots").update(payload).eq("id", row.snapshot_id)
           : await supabase.from("snapshots").insert([payload]);
-        if (error) { notify("Save failed: " + error.message); return; }
+        if (error) { notifyError(error); return; }
         saved++;
       }
       notify(`Saved ${saved} snapshot${saved === 1 ? "" : "s"}`);
       load();
+      return;
+    }
+    if (isParentAccount(form.account_id)) {
+      notify("Parent account balances are derived from children — can't set a value directly");
       return;
     }
     const balance = parseCash(form.balance);
@@ -136,10 +145,10 @@ export default function App() {
     const payload = { account_id: Number(form.account_id), snapshot_date: form.snapshot_date, balance, notes: form.notes || null };
     if (mode === "new") {
       const { error } = await supabase.from("snapshots").insert([payload]);
-      if (error) { notify("Save failed: " + error.message); return; }
+      if (error) { notifyError(error); return; }
     } else {
       const { error } = await supabase.from("snapshots").update(payload).eq("id", form.id);
-      if (error) { notify("Save failed: " + error.message); return; }
+      if (error) { notifyError(error); return; }
     }
     notify("Saved");
     load();
@@ -150,7 +159,7 @@ export default function App() {
     const { error } = mode === "new"
       ? await supabase.from("accounts").insert([payload])
       : await supabase.from("accounts").update(payload).eq("id", form.id);
-    if (error) { notify("Save failed: " + error.message); return; }
+    if (error) { notifyError(error); return; }
     notify("Saved");
     load();
   };
@@ -179,7 +188,9 @@ export default function App() {
           <div style={S.logoSub}>Personal finance</div>
         </div>
         {PAGES.map(p => (
-          <div key={p.id} style={S.navItem(page === p.id)} onClick={() => setPage(p.id)}>{p.label}</div>
+          <div key={p.id} style={{ ...S.navItem(page === p.id), opacity: p.deprecated ? 0.5 : 1 }} onClick={() => setPage(p.id)}>
+            {p.label}{p.deprecated && <span style={{ fontSize: 9, marginLeft: 6, letterSpacing: "0.1em", color: C.textSubtle }}>DEPRECATED</span>}
+          </div>
         ))}
         <div style={{ flex: 1 }} />
         <div style={{ padding: "12px 20px", borderTop: "1px solid #1e1e1e" }}>
@@ -195,7 +206,7 @@ export default function App() {
 
       <main style={S.main}>
         {page === "dashboard" && <Dashboard    accounts={accounts} snapshots={snapshots} />}
-        {page === "mom"       && <MoMPage       accounts={accounts} snapshots={snapshots} />}
+        {page === "mom"       && <MoMPage       accounts={accounts} snapshots={snapshots} transfers={transfers} onDelete={handleDelete} onRefresh={load} />}
         {page === "returns"   && <ReturnsPage   accounts={accounts} snapshots={snapshots} transfers={transfers} onDelete={handleDelete} onRefresh={load} />}
         {page === "snapshots" && <SnapshotsPage accounts={accounts} snapshots={snapshots} onSave={handleSaveSnapshot} onDelete={handleDelete} onDeleteMonth={handleDeleteMonth} />}
         {page === "accounts"  && <AccountsPage  accounts={accounts} onSave={handleSaveAccount} onDelete={handleDelete} />}

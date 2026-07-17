@@ -25,6 +25,25 @@ export function accountHasChildren(accountId, accounts) {
   return accounts.some(a => a.parent_id === accountId);
 }
 
+// Sum snapshot balances per account type for a given date, counting each LEAF
+// account once under its own type. Parent accounts are skipped — their balance
+// lives in their children — so cross-type nesting (e.g. a 401k under an
+// investment brokerage) attributes each leaf to its own type without
+// double-counting. This is the single source of truth for net-worth totals.
+export function leafTypeTotals(snapshots, accounts, date) {
+  const byAccount = {};
+  for (const s of snapshots) if (s.snapshot_date === date) byAccount[s.account_id] = s;
+  const parentIds = new Set(accounts.map(a => a.parent_id).filter(id => id != null));
+  const totals = {};
+  for (const a of accounts) {
+    if (parentIds.has(a.id)) continue;            // has children → not a leaf
+    const snap = byAccount[a.id];
+    if (snap == null) continue;
+    totals[a.type] = (totals[a.type] ?? 0) + Number(snap.balance);
+  }
+  return totals;
+}
+
 export function deriveSnapshotBalance(accountId, snapsByAccount, accounts, cache = {}) {
   if (cache[accountId] !== undefined) return cache[accountId];
   const children = childrenOfAccount(accounts, accountId);
