@@ -71,7 +71,7 @@ export default function AccountsPage({ accounts, onSave, onDelete }) {
                   const hasKids = isTop && accs.some(o => o.parent_id === a.id);
                   return (
                     <tr key={a.id} style={isTop ? { background: "#181818", borderTop: `1px solid ${C.border}` } : {}}>
-                      <td style={{ ...S.td, fontWeight: isTop ? 700 : 400, color: isTop ? C.text : C.textMuted, paddingLeft: 12 + a.depth * 20 }}>
+                      <td style={{ ...S.td, fontWeight: isTop ? 700 : 400, color: isTop ? C.text : C.textMuted, paddingLeft: S.indent(a.depth) }}>
                         {hasKids
                           ? <span style={{ color: C.textSubtle, marginRight: 6, cursor: "pointer", userSelect: "none", fontSize: 11 }} onClick={() => toggleCollapse(a.id)}>{collapsed.has(a.id) ? "▶" : "▼"}</span>
                           : (a.depth > 0 && <span style={{ color: C.textSubtle, marginRight: 6 }}>↳</span>)

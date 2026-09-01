@@ -150,7 +150,7 @@ export default function SnapshotsPage({ accounts, snapshots, onSave, onDelete, o
                     const isTopLevel = depth === 0;
                     return (
                       <tr key={snap?.id ?? `rollup-${account.id}`} style={isTopLevel ? { background: "#181818", borderTop: `1px solid ${C.border}` } : {}}>
-                        <td style={{ ...S.td, fontWeight: isTopLevel ? 700 : 400, paddingLeft: 12 + depth * 20, color: isTopLevel ? C.text : C.textMuted }}>
+                        <td style={{ ...S.td, fontWeight: isTopLevel ? 700 : 400, paddingLeft: S.indent(depth), color: isTopLevel ? C.text : C.textMuted }}>
                           {isTopLevel && hasChildren
                             ? <span style={{ color: C.textSubtle, marginRight: 6, cursor: "pointer", userSelect: "none", fontSize: 11 }} onClick={() => toggleCollapse(account.id)}>{collapsed.has(account.id) ? "▶" : "▼"}</span>
                             : (depth > 0 && <span style={{ color: C.textSubtle, marginRight: 6 }}>↳</span>)
@@ -233,7 +233,7 @@ export default function SnapshotsPage({ accounts, snapshots, onSave, onDelete, o
                   const derivedNew = row.hasChildren ? deriveRowsBalance(row.account_id, form.rows, assetAccounts) : null;
                   return (
                     <tr key={row.account_id}>
-                      <td style={{ ...S.td, paddingLeft: 12 + depth * 20 }}>
+                      <td style={{ ...S.td, paddingLeft: S.indent(depth) }}>
                         <div style={{ fontWeight: depth === 0 ? 600 : 400 }}>
                           {depth > 0 && <span style={{ color: C.textSubtle, marginRight: 6 }}>↳</span>}
                           {acc?.name ?? "Unknown"}
