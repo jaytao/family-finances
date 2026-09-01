@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { supabase } from "./lib/supabase.js";
 import { parseCash, fmtDate } from "./lib/formatters.js";
 import { C, S } from "./styles/theme.js";
+import useIsMobile from "./lib/useIsMobile.js";
 import Toast from "./components/Toast.jsx";
 import Dashboard from "./pages/Dashboard.jsx";
 import MoMPage from "./pages/MoMPage.jsx";
@@ -22,6 +23,7 @@ export default function App() {
   const [session, setSession]           = useState(null);
   const [authLoading, setAuthLoading]   = useState(true);
   const [page, setPage]                 = useState("dashboard");
+  const [navOpen, setNavOpen]           = useState(false);
   const [accounts, setAccounts]         = useState([]);
   const [snapshots, setSnapshots]       = useState([]);
   const [transfers, setTransfers]       = useState([]);
@@ -33,6 +35,25 @@ export default function App() {
   // Postgres check_violation (23514) messages from our triggers are user-facing —
   // show them verbatim; otherwise fall back to a generic prefix.
   const notifyError = (error) => notify(error.code === "23514" ? error.message : "Save failed: " + error.message);
+
+  const isMobile = useIsMobile();
+
+  // Close the drawer when the layout leaves mobile, and lock body scroll behind it.
+  useEffect(() => {
+    if (!isMobile) setNavOpen(false);
+  }, [isMobile]);
+
+  useEffect(() => {
+    if (!isMobile || !navOpen) return;
+    const onKey = (e) => { if (e.key === "Escape") setNavOpen(false); };
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = prevOverflow;
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [isMobile, navOpen]);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session: s } }) => {
@@ -180,15 +201,54 @@ export default function App() {
     </div>
   );
 
+  const currentPage = PAGES.find(p => p.id === page);
+
   return (
-    <div style={{ ...S.app, display: "flex" }}>
-      <nav style={S.sidebar}>
-        <div style={S.sidebarLogo}>
+    <div style={{ ...S.app, ...S.tableVars(isMobile), display: "flex", flexDirection: isMobile ? "column" : "row" }}>
+      {isMobile && (
+        <header style={S.topbar}>
+          <button
+            type="button"
+            style={S.menuBtn}
+            onClick={() => setNavOpen(true)}
+            aria-label="Open navigation"
+            aria-expanded={navOpen}
+          >
+            <span style={S.menuBar} /><span style={S.menuBar} /><span style={S.menuBar} />
+          </button>
           <div style={S.logoText}>Ledger</div>
-          <div style={S.logoSub}>Personal finance</div>
+          <div style={{ flex: 1 }} />
+          <div style={{ fontSize: 12, letterSpacing: "0.1em", textTransform: "uppercase", color: C.textMuted }}>
+            {currentPage?.label}
+          </div>
+        </header>
+      )}
+
+      {isMobile && navOpen && <div style={S.navBackdrop} onClick={() => setNavOpen(false)} />}
+
+      <nav style={S.sidebar(isMobile, navOpen)} aria-hidden={isMobile && !navOpen}>
+        <div style={{ ...S.sidebarLogo, display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12 }}>
+          <div>
+            <div style={S.logoText}>Ledger</div>
+            <div style={S.logoSub}>Personal finance</div>
+          </div>
+          {isMobile && (
+            <button
+              type="button"
+              style={{ ...S.btnGhost, padding: "4px 10px", fontSize: 16, lineHeight: 1, border: "none" }}
+              onClick={() => setNavOpen(false)}
+              aria-label="Close navigation"
+            >
+              ×
+            </button>
+          )}
         </div>
         {PAGES.map(p => (
-          <div key={p.id} style={{ ...S.navItem(page === p.id), opacity: p.deprecated ? 0.5 : 1 }} onClick={() => setPage(p.id)}>
+          <div
+            key={p.id}
+            style={{ ...S.navItem(page === p.id), opacity: p.deprecated ? 0.5 : 1 }}
+            onClick={() => { setPage(p.id); setNavOpen(false); }}
+          >
             {p.label}{p.deprecated && <span style={{ fontSize: 9, marginLeft: 6, letterSpacing: "0.1em", color: C.textSubtle }}>DEPRECATED</span>}
           </div>
         ))}
@@ -204,7 +264,7 @@ export default function App() {
         </div>
       </nav>
 
-      <main style={S.main}>
+      <main style={S.main(isMobile)}>
         {page === "dashboard" && <Dashboard    accounts={accounts} snapshots={snapshots} />}
         {page === "mom"       && <MoMPage       accounts={accounts} snapshots={snapshots} transfers={transfers} onDelete={handleDelete} onRefresh={load} />}
         {page === "returns"   && <ReturnsPage   accounts={accounts} snapshots={snapshots} transfers={transfers} onDelete={handleDelete} onRefresh={load} />}

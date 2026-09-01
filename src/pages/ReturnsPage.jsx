@@ -140,7 +140,7 @@ export default function ReturnsPage({ accounts, snapshots, transfers, onDelete, 
           <tbody>
             {rows.map(({ acc, ending, beginning, netContrib, gain, ret, isParent }) => (
               <tr key={acc.id} style={isParent ? { background: "#181818", borderTop: `1px solid ${C.border}` } : {}}>
-                <td style={{ ...S.td, paddingLeft: 12 + acc.depth * 20, fontWeight: isParent ? 700 : 400, color: isParent ? C.text : C.textMuted }}>
+                <td style={{ ...S.td, paddingLeft: S.indent(acc.depth), fontWeight: isParent ? 700 : 400, color: isParent ? C.text : C.textMuted }}>
                   {acc.depth > 0 && <span style={{ color: C.textSubtle, marginRight: 6 }}>↳</span>}
                   {acc.name}
                 </td>

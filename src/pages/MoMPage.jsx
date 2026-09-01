@@ -170,7 +170,7 @@ export default function MoMPage({ accounts, snapshots, transfers, onDelete, onRe
     const sumChangeStyle = sumChange == null ? S.neutral : changeStyleOf(sumChange);
     return [
       <tr key={`grp-${type}`} style={{ background: (TYPE_COLORS[type] ?? C.border) + "18", borderTop: `2px solid ${TYPE_COLORS[type] ?? C.border}` }}>
-        <td style={{ ...S.td, padding: "10px 12px" }}>
+        <td style={{ ...S.td, padding: "var(--th-py, 10px) var(--cell-px, 12px)" }}>
           <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 11, letterSpacing: "0.12em", textTransform: "uppercase", color: TYPE_COLORS[type] ?? C.textMuted, fontWeight: 700 }}>
             <span style={{ width: 6, height: 6, borderRadius: "50%", background: TYPE_COLORS[type] ?? C.textMuted, display: "inline-block" }} />
             {label}
@@ -187,7 +187,7 @@ export default function MoMPage({ accounts, snapshots, transfers, onDelete, onRe
         const changeStyle = change == null ? S.neutral : changeStyleOf(change);
         return (
           <tr key={acc.id} style={isParent ? { background: "#181818", borderTop: `1px solid ${C.border}` } : {}}>
-            <td style={{ ...S.td, paddingLeft: 12 + acc.depth * 16, fontWeight: isParent ? 600 : 400, color: C.textMuted }}>
+            <td style={{ ...S.td, paddingLeft: S.indent(acc.depth, 16), fontWeight: isParent ? 600 : 400, color: C.textMuted }}>
               {isParent && <span style={{ color: C.textSubtle, marginRight: 6, fontSize: 11 }}>Σ</span>}
               {acc.name}
             </td>
