@@ -89,9 +89,13 @@ export default function MoMPage({ accounts, snapshots, transfers, onDelete, onRe
       const prev = deriveSnapshotBalance(acc.id, prevByAccount, accsOfType);
       if (curr == null && prev == null) return null;
       const netContrib = subtreeContrib(acc.id, accsOfType);
-      const change = (curr ?? 0) - (prev ?? 0) - netContrib;
+      // Two returns per row: `gross` is the raw balance move; `change` strips out
+      // contributions to leave what the account actually earned.
+      const gross = (curr ?? 0) - (prev ?? 0);
+      const grossPct = (prev ?? 0) ? (gross / Math.abs(prev ?? 0)) * 100 : null;
+      const change = gross - netContrib;
       const changePct = (prev ?? 0) ? (change / Math.abs(prev ?? 0)) * 100 : null;
-      return { acc, curr, prev, netContrib, change, changePct };
+      return { acc, curr, prev, netContrib, gross, grossPct, change, changePct };
     }).filter(Boolean);
     if (!rows.length) return null;
     return { type, label, group, accs: accsOfType, rows };
@@ -140,12 +144,17 @@ export default function MoMPage({ accounts, snapshots, transfers, onDelete, onRe
         <th style={{ ...S.th, textAlign: "right" }}>Ending</th>
         <th style={{ ...S.th, textAlign: "right" }}>Change</th>
         <th style={{ ...S.th, textAlign: "right" }}>% Change</th>
+        <th style={{ ...S.th, textAlign: "right" }}>Change excl. Contrib</th>
+        <th style={{ ...S.th, textAlign: "right" }}>% excl. Contrib</th>
       </tr>
     </thead>
   );
 
   const totalRow = (key, label, t, emphasize) => {
-    const change = t.curr - t.prev - t.contrib;
+    const gross = t.curr - t.prev;
+    const grossPct = t.prev ? (gross / Math.abs(t.prev)) * 100 : null;
+    const gs = changeStyleOf(gross);
+    const change = gross - t.contrib;
     const pct = t.prev ? (change / Math.abs(t.prev)) * 100 : null;
     const cs = changeStyleOf(change);
     return (
@@ -154,6 +163,8 @@ export default function MoMPage({ accounts, snapshots, transfers, onDelete, onRe
         <td style={{ ...S.td, textAlign: "right", fontWeight: 700, color: C.textMuted }}>{fmt(t.prev)}</td>
         <td style={{ ...S.td, textAlign: "right", fontWeight: 700, color: contribColor(t.contrib) }}>{t.contrib ? fmt(t.contrib) : "—"}</td>
         <td style={{ ...S.td, textAlign: "right", fontWeight: 700, color: C.text }}>{fmt(t.curr)}</td>
+        <td style={{ ...S.td, textAlign: "right", fontWeight: 700, ...gs }}>{fmt(gross)}</td>
+        <td style={{ ...S.td, textAlign: "right", fontWeight: 700, ...gs }}>{fmtPct(grossPct)}</td>
         <td style={{ ...S.td, textAlign: "right", fontWeight: 700, ...cs }}>{fmt(change)}</td>
         <td style={{ ...S.td, textAlign: "right", fontWeight: 700, ...cs }}>{fmtPct(pct)}</td>
       </tr>
@@ -165,7 +176,10 @@ export default function MoMPage({ accounts, snapshots, transfers, onDelete, onRe
     const sumPrev   = topRows.some(r => r.prev != null) ? topRows.reduce((s, r) => s + (r.prev ?? 0), 0) : null;
     const sumCurr   = topRows.some(r => r.curr != null) ? topRows.reduce((s, r) => s + (r.curr ?? 0), 0) : null;
     const sumContrib = topRows.reduce((s, r) => s + r.netContrib, 0);
-    const sumChange = sumCurr != null || sumPrev != null ? (sumCurr ?? 0) - (sumPrev ?? 0) - sumContrib : null;
+    const sumGross = sumCurr != null || sumPrev != null ? (sumCurr ?? 0) - (sumPrev ?? 0) : null;
+    const sumGrossPct = sumGross != null && (sumPrev ?? 0) ? (sumGross / Math.abs(sumPrev ?? 0)) * 100 : null;
+    const sumGrossStyle = sumGross == null ? S.neutral : changeStyleOf(sumGross);
+    const sumChange = sumGross != null ? sumGross - sumContrib : null;
     const sumChangePct = sumChange != null && (sumPrev ?? 0) ? (sumChange / Math.abs(sumPrev ?? 0)) * 100 : null;
     const sumChangeStyle = sumChange == null ? S.neutral : changeStyleOf(sumChange);
     return [
@@ -179,11 +193,14 @@ export default function MoMPage({ accounts, snapshots, transfers, onDelete, onRe
         <td style={{ ...S.td, textAlign: "right", fontWeight: 700, color: C.textMuted }}>{sumPrev != null ? fmt(sumPrev) : "—"}</td>
         <td style={{ ...S.td, textAlign: "right", fontWeight: 700, color: contribColor(sumContrib) }}>{sumContrib ? fmt(sumContrib) : "—"}</td>
         <td style={{ ...S.td, textAlign: "right", fontWeight: 700, color: C.text }}>{sumCurr != null ? fmt(sumCurr) : "—"}</td>
+        <td style={{ ...S.td, textAlign: "right", fontWeight: 700, ...sumGrossStyle }}>{sumGross != null ? fmt(sumGross) : "—"}</td>
+        <td style={{ ...S.td, textAlign: "right", fontWeight: 700, ...sumGrossStyle }}>{fmtPct(sumGrossPct)}</td>
         <td style={{ ...S.td, textAlign: "right", fontWeight: 700, ...sumChangeStyle }}>{sumChange != null ? fmt(sumChange) : "—"}</td>
         <td style={{ ...S.td, textAlign: "right", fontWeight: 700, ...sumChangeStyle }}>{fmtPct(sumChangePct)}</td>
       </tr>,
-      ...rows.map(({ acc, curr, prev, netContrib, change, changePct }) => {
+      ...rows.map(({ acc, curr, prev, netContrib, gross, grossPct, change, changePct }) => {
         const isParent = accountHasChildren(acc.id, accs);
+        const grossStyle = gross == null ? S.neutral : changeStyleOf(gross);
         const changeStyle = change == null ? S.neutral : changeStyleOf(change);
         return (
           <tr key={acc.id} style={isParent ? { background: "#181818", borderTop: `1px solid ${C.border}` } : {}}>
@@ -194,6 +211,8 @@ export default function MoMPage({ accounts, snapshots, transfers, onDelete, onRe
             <td style={{ ...S.td, textAlign: "right", fontStyle: isParent ? "italic" : "normal", color: C.textSubtle }}>{prev != null ? fmt(prev) : "—"}</td>
             <td style={{ ...S.td, textAlign: "right", fontStyle: isParent ? "italic" : "normal", color: netContrib > 0 ? "#60a5fa" : netContrib < 0 ? "#fb923c" : C.textSubtle }}>{netContrib ? fmt(netContrib) : "—"}</td>
             <td style={{ ...S.td, textAlign: "right", fontStyle: isParent ? "italic" : "normal", color: isParent ? C.textSubtle : C.text }}>{curr != null ? fmt(curr) : "—"}</td>
+            <td style={{ ...S.td, textAlign: "right", fontStyle: isParent ? "italic" : "normal", ...(isParent ? S.neutral : grossStyle) }}>{gross != null ? fmt(gross) : "—"}</td>
+            <td style={{ ...S.td, textAlign: "right", fontStyle: isParent ? "italic" : "normal", ...(isParent ? S.neutral : grossStyle) }}>{fmtPct(isParent ? null : grossPct)}</td>
             <td style={{ ...S.td, textAlign: "right", fontStyle: isParent ? "italic" : "normal", ...(isParent ? S.neutral : changeStyle) }}>{change != null ? fmt(change) : "—"}</td>
             <td style={{ ...S.td, textAlign: "right", fontStyle: isParent ? "italic" : "normal", ...(isParent ? S.neutral : changeStyle) }}>{fmtPct(isParent ? null : changePct)}</td>
           </tr>
